@@ -1,4 +1,7 @@
 import requests
+import random
+import time
+
 from stock import set_product, get_product, get_all
 from flask import Flask, request
 
@@ -10,6 +13,31 @@ from translations import format_product_name, add_translation
 from utils import emoji_for_product, extract_taste_emojis
 from admin import update_taste, add_product
 from recipes import recipes_by_ingredient, get_recipe
+from nlp_food import extract_ingredients
+from speech_db import phrase
+
+def human_pause(a=0.4, b=1.2):
+
+    time.sleep(random.uniform(a, b))
+
+
+def typing(chat_id):
+
+    requests.post(
+        f"{TELEGRAM_URL}/sendChatAction",
+        json={
+            "chat_id": chat_id,
+            "action": "typing"
+        }
+    )
+
+
+def maybe_reaction(chat_id):
+
+    if random.random() < 0.35:
+
+        send(chat_id, phrase("reaction"))
+        human_pause()
 
 
 app = Flask(__name__)
@@ -173,29 +201,34 @@ def webhook():
 
     if "message" in update:
 
-        chat_id = update["message"]["chat"]["id"]
-        text = update["message"].get("text", "").strip()
+        message = update["message"]
+        chat_id = message["chat"]["id"]
+        text = message.get("text", "")
+        typing(chat_id)
+        human_pause()
+
+        maybe_reaction(chat_id)
 
         state = user_state.get(chat_id)
 
         if state and state.get("level") == "set_price":
 
-                name = state["product"]
+            name = state["product"]
 
-                try:
-                    price = float(text.replace(",", "."))
+            try:
+                price = float(text.replace(",", "."))
 
-                except:
-                    send(chat_id, "Напиши цену числом")
-                    return "ok"
-
-                set_product(name, price=price)
-
-                send(chat_id, f"Цена для {name}: {price} лв")
-
-                show_menu(chat_id)
-
+            except:
+                send(chat_id, "Напиши цену числом")
                 return "ok"
+
+            set_product(name, price=price)
+
+            send(chat_id, f"Цена для {name}: {price} лв")
+
+            show_menu(chat_id)
+
+            return "ok"
 
         if text == "/start":
             show_menu(chat_id)
@@ -226,7 +259,21 @@ def webhook():
 
             user_state[chat_id] = {"level": "add_category"}
 
-            send(chat_id, "В какую категорию добавить продукт?")
+            categories = get_categories(data)
+
+            buttons = []
+
+            for name, emoji in categories.items():
+                buttons.append([f"{emoji} {name}"])
+
+            buttons.append(["⬅ Назад"])
+
+            send(
+                chat_id,
+                "В какую категорию добавить продукт? Можно выбрать или написать новую 👇",
+                reply_keyboard(buttons),
+            )
+
             return "ok"
 
         if state and state.get("level") == "add_category":
@@ -381,10 +428,43 @@ def webhook():
         send(chat_id, "🍳 Можно приготовить:", inline_keyboard(buttons[:8]))
 
         return "ok"
+    
+    ingredients = extract_ingredients(text)
+
+    if ingredients:
+
+        send(chat_id, phrase("THINKING"))
+
+        ingredient = ingredients[0]
+
+        recipes = recipes_by_ingredient(ingredient)
+
+        if recipes:
+
+            buttons = []
+
+        for r in recipes:
+
+            buttons.append([
+                {"text": r["strMeal"], "callback_data": f"RECIPE:{r['idMeal']}`"}
+            ])
+
+        send(
+            chat_id,
+            phrase("RECIPES"),
+            inline_keyboard(buttons)
+        )
+
+        return "ok"
 
     if "callback_query" in update:
 
         callback = update["callback_query"]
+
+        requests.post(
+            f"{TELEGRAM_URL}/answerCallbackQuery",
+            json={"callback_query_id": callback["id"]},
+        )
 
         chat_id = callback["message"]["chat"]["id"]
         message_id = callback["message"]["message_id"]
@@ -408,16 +488,12 @@ def webhook():
             emoji = emoji_for_product(product[5], product[4])
             taste = extract_taste_emojis(product[6])
 
-            text = f"{emoji} {name}\n\n{product[6]}\n\n{taste}"
+            text = f"{phrase('open_product')}\n\n{emoji} {name}\n\n{product[6]}\n\n{taste}"
 
             buttons = [
                 [
                     {"text": "💰 Цена", "callback_data": f"PRICE:{product[5]}"},
-                    {"text": "📦 Есть", "callback_data": f"HAVE:{product[5]}"},
-                ],
-                [
-                    {"text": "⚠ Заканчивается", "callback_data": f"LOW:{product[5]}"},
-                    {"text": "🛒 Купить", "callback_data": f"BUY:{product[5]}"},
+                    {"text": "📦 Наличие", "callback_data": f"STOCK:{product[5]}"},
                 ],
                 [{"text": "🍳 Рецепты", "callback_data": f"REC:{product[5]}"}],
             ]
@@ -445,7 +521,7 @@ def webhook():
             edit(
                 chat_id,
                 message_id,
-                "Вот что можно приготовить 👇",
+                phrase("recipes"),
                 inline_keyboard(buttons),
             )
             return "ok"
@@ -466,9 +542,8 @@ def webhook():
 
             set_product(name, status="есть")
 
-            send(chat_id, f"{name} отмечен как: есть")
+            send(chat_id, phrase("have", name=name))
             return "ok"
-
 
         if data_cb.startswith("LOW:"):
 
@@ -476,9 +551,8 @@ def webhook():
 
             set_product(name, status="заканчивается")
 
-            send(chat_id, f"{name} заканчивается")
+            send(chat_id, phrase("low", name=name))
             return "ok"
-
 
         if data_cb.startswith("BUY:"):
 
@@ -486,9 +560,28 @@ def webhook():
 
             set_product(name, status="купить")
 
-            send(chat_id, f"{name} добавлен в список покупок")
+            send(chat_id, phrase("buy", name=name))
 
             return "ok"
+
+
+        if data_cb.startswith("STOCK:"):
+
+            name = data_cb.split(":")[1]
+
+            buttons = [
+                [{"text": "📦 Есть", "callback_data": f"HAVE:{name}"}],
+                [{"text": "⚠ Заканчивается", "callback_data": f"LOW:{name}"}],
+                [{"text": "🛒 Купить", "callback_data": f"BUY:{name}"}],
+                [{"text": "❌ Нет", "callback_data": f"NONE:{name}"}],
+            ]
+
+            edit(
+                chat_id,
+                message_id,
+                f"Наличие продукта: {name}",
+                inline_keyboard(buttons),
+            )
 
     return "ok"
 
