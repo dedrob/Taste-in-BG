@@ -1,4 +1,5 @@
 import requests
+from stock import set_product, get_product, get_all
 from flask import Flask, request
 
 from config import TOKEN
@@ -8,6 +9,7 @@ from search import search_products
 from translations import format_product_name, add_translation
 from utils import emoji_for_product, extract_taste_emojis
 from admin import update_taste, add_product
+from recipes import recipes_by_ingredient, get_recipe
 
 
 app = Flask(__name__)
@@ -19,12 +21,10 @@ user_state = {}
 
 # ================= TELEGRAM =================
 
+
 def send(chat_id, text, keyboard=None):
 
-    payload = {
-        "chat_id": chat_id,
-        "text": text
-    }
+    payload = {"chat_id": chat_id, "text": text}
 
     if keyboard:
         payload["reply_markup"] = keyboard
@@ -34,11 +34,7 @@ def send(chat_id, text, keyboard=None):
 
 def edit(chat_id, message_id, text, keyboard=None):
 
-    payload = {
-        "chat_id": chat_id,
-        "message_id": message_id,
-        "text": text
-    }
+    payload = {"chat_id": chat_id, "message_id": message_id, "text": text}
 
     if keyboard:
         payload["reply_markup"] = keyboard
@@ -48,20 +44,16 @@ def edit(chat_id, message_id, text, keyboard=None):
 
 def reply_keyboard(buttons):
 
-    return {
-        "keyboard": buttons,
-        "resize_keyboard": True
-    }
+    return {"keyboard": buttons, "resize_keyboard": True}
 
 
 def inline_keyboard(buttons):
 
-    return {
-        "inline_keyboard": buttons
-    }
+    return {"inline_keyboard": buttons}
 
 
 # ================= MENU =================
+
 
 def show_menu(chat_id):
 
@@ -69,17 +61,16 @@ def show_menu(chat_id):
 
     buttons = [
         ["📂 Разделы"],
-        ["➕ Добавить продукт"]
+        ["🛒 Список покупок"],
+        ["🍳 Что приготовить"],
+        ["➕ Добавить продукт"],
     ]
 
-    send(
-        chat_id,
-        "Я на месте. Что смотрим? 👀",
-        reply_keyboard(buttons)
-    )
+    send(chat_id, "Я на месте. Что смотрим? 👀", reply_keyboard(buttons))
 
 
 # ================= CATEGORIES =================
+
 
 def show_categories(chat_id, data):
 
@@ -93,27 +84,21 @@ def show_categories(chat_id, data):
 
     for i in range(0, len(items), 2):
 
-        pair = items[i:i+2]
+        pair = items[i : i + 2]
 
         buttons.append([f"{emoji} {name}" for name, emoji in pair])
 
     buttons.append(["⬅ Назад"])
 
-    send(
-        chat_id,
-        "Давай определимся с направлением 👇",
-        reply_keyboard(buttons)
-    )
+    send(chat_id, "Давай определимся с направлением 👇", reply_keyboard(buttons))
 
 
 # ================= TYPES =================
 
+
 def show_types(chat_id, data, category):
 
-    user_state[chat_id] = {
-        "level": "types",
-        "category": category
-    }
+    user_state[chat_id] = {"level": "types", "category": category}
 
     types = get_types(data, category)
 
@@ -123,20 +108,17 @@ def show_types(chat_id, data, category):
 
     for i in range(0, len(items), 2):
 
-        pair = items[i:i+2]
+        pair = items[i : i + 2]
 
         buttons.append([f"{emoji} {name}" for name, emoji in pair])
 
     buttons.append(["⬅ Назад"])
 
-    send(
-        chat_id,
-        f"Смотрим {category} 👇",
-        reply_keyboard(buttons)
-    )
+    send(chat_id, f"Смотрим {category} 👇", reply_keyboard(buttons))
 
 
 # ================= PRODUCTS =================
+
 
 def show_products(chat_id, data, category, type_name, page=0, message_id=None):
 
@@ -146,7 +128,7 @@ def show_products(chat_id, data, category, type_name, page=0, message_id=None):
         "level": "products",
         "category": category,
         "type": type_name,
-        "page": page
+        "page": page,
     }
 
     paged = paginate(products, page)
@@ -158,13 +140,9 @@ def show_products(chat_id, data, category, type_name, page=0, message_id=None):
     for row in paged:
 
         name = format_product_name(row[5])
-
         emoji = emoji_for_product(row[5], row[4])
 
-        buttons.append([{
-            "text": f"{emoji} {name}",
-            "callback_data": f"P:{row[0]}"
-        }])
+        buttons.append([{"text": f"{emoji} {name}", "callback_data": f"P:{row[0]}"}])
 
     nav = []
 
@@ -186,14 +164,12 @@ def show_products(chat_id, data, category, type_name, page=0, message_id=None):
 
 # ================= WEBHOOK =================
 
+
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
 
     update = request.json
-
     data = load_data()
-
-    # ---------- MESSAGE ----------
 
     if "message" in update:
 
@@ -202,13 +178,30 @@ def webhook():
 
         state = user_state.get(chat_id)
 
-        if text == "/start":
+        if state and state.get("level") == "set_price":
 
+                name = state["product"]
+
+                try:
+                    price = float(text.replace(",", "."))
+
+                except:
+                    send(chat_id, "Напиши цену числом")
+                    return "ok"
+
+                set_product(name, price=price)
+
+                send(chat_id, f"Цена для {name}: {price} лв")
+
+                show_menu(chat_id)
+
+                return "ok"
+
+        if text == "/start":
             show_menu(chat_id)
             return "ok"
 
         if text == "📂 Разделы":
-
             show_categories(chat_id, data)
             return "ok"
 
@@ -229,14 +222,11 @@ def webhook():
 
             return "ok"
 
-        # ===== ADD PRODUCT START =====
-
         if text == "➕ Добавить продукт":
 
             user_state[chat_id] = {"level": "add_category"}
 
             send(chat_id, "В какую категорию добавить продукт?")
-
             return "ok"
 
         if state and state.get("level") == "add_category":
@@ -287,61 +277,12 @@ def webhook():
                 state["type"],
                 state["type_emoji"],
                 state["product"],
-                text
+                text,
             )
 
             send(chat_id, "Продукт добавлен ✨")
-
             show_menu(chat_id)
             return "ok"
-
-        # ===== EDIT TASTE =====
-
-        if state and state.get("level") == "edit_taste":
-
-            update_taste(state["row"], text)
-
-            send(chat_id, "Вкус обновлён ✨")
-
-            show_menu(chat_id)
-
-            return "ok"
-
-        # ===== ADD TRANSLATION =====
-
-        if state and state.get("level") == "add_translation":
-
-            add_translation(state["product"], text)
-
-            send(chat_id, "Перевод сохранён 🇧🇬")
-
-            show_menu(chat_id)
-
-            return "ok"
-
-        # ===== CATEGORY CLICK =====
-
-        clean = text.split(" ", 1)[-1]
-
-        categories = get_categories(data)
-
-        if clean in categories:
-
-            show_types(chat_id, data, clean)
-            return "ok"
-
-        # ===== TYPE CLICK =====
-
-        if state and state.get("level") == "types":
-
-            types = get_types(data, state["category"])
-
-            if clean in types:
-
-                show_products(chat_id, data, state["category"], clean, 0)
-                return "ok"
-
-        # ===== SEARCH =====
 
         results = search_products(text, data)
 
@@ -354,20 +295,92 @@ def webhook():
                 name = format_product_name(row[5])
                 emoji = emoji_for_product(row[5], row[4])
 
-                buttons.append([{
-                    "text": f"{emoji} {name}",
-                    "callback_data": f"P:{row[0]}"
-                }])
+                buttons.append(
+                    [{"text": f"{emoji} {name}", "callback_data": f"P:{row[0]}"}]
+                )
 
-            send(
-                chat_id,
-                "Нашёл кое-что 👀",
-                inline_keyboard(buttons)
-            )
-
+            send(chat_id, "Нашёл кое-что 👀", inline_keyboard(buttons))
             return "ok"
 
-    # ---------- CALLBACK ----------
+        if text == "🛒 Список покупок":
+
+            data = get_all()
+
+            items = []
+
+            for name, info in data.items():
+
+                if (
+                    info.get("status") == "купить"
+                    or info.get("status") == "заканчивается"
+                ):
+                    items.append(name)
+
+            if not items:
+
+                send(chat_id, "🛒 Покупать пока ничего не нужно")
+
+    else:
+
+        text_out = "🛒 Нужно купить:\n\n"
+
+        for i in items:
+            text_out += f"• {i}\n"
+
+        send(chat_id, text_out)
+
+        return "ok"
+
+    if text == "🍳 Что приготовить":
+
+        stock = get_all()
+
+        ingredients = []
+
+        for name, info in stock.items():
+
+            if info.get("status") == "есть":
+                ingredients.append(name)
+
+        if not ingredients:
+
+            send(chat_id, "Пока нет продуктов со статусом 'есть'")
+            return "ok"
+
+        buttons = []
+
+        found = []
+
+        for ingredient in ingredients:
+
+            recipes = recipes_by_ingredient(ingredient)
+
+            for r in recipes:
+
+                if r["idMeal"] not in found:
+
+                    found.append(r["idMeal"])
+
+                    buttons.append(
+                        [
+                            {
+                                "text": f"{r['strMeal']} ({ingredient})",
+                                "callback_data": f"RECIPE:{r['idMeal']}",
+                            }
+                        ]
+                    )
+
+            if len(buttons) >= 8:
+                break
+
+        if not buttons:
+
+            send(chat_id, "Не нашёл рецептов 👀")
+            return "ok"
+
+        send(chat_id, "🍳 Можно приготовить:", inline_keyboard(buttons[:8]))
+
+        return "ok"
 
     if "callback_query" in update:
 
@@ -387,89 +400,97 @@ def webhook():
             row_id = int(data_cb.split(":")[1])
 
             for row in data:
-
                 if row[0] == row_id:
                     product = row
                     break
 
             name = format_product_name(product[5])
-
             emoji = emoji_for_product(product[5], product[4])
-
             taste = extract_taste_emojis(product[6])
 
-            text = (
-                f"{emoji} {name}\n\n"
-                f"{product[6]}\n\n"
-                f"{taste}"
-            )
+            text = f"{emoji} {name}\n\n{product[6]}\n\n{taste}"
 
-            buttons = [[
-                {"text": "⬅ К списку", "callback_data": "BACK"},
-                {"text": "✏ Изменить вкус", "callback_data": f"EDIT:{row_id}"},
-                {"text": "🇧🇬 Перевод", "callback_data": f"TR:{product[5]}"}
-            ]]
+            buttons = [
+                [
+                    {"text": "💰 Цена", "callback_data": f"PRICE:{product[5]}"},
+                    {"text": "📦 Есть", "callback_data": f"HAVE:{product[5]}"},
+                ],
+                [
+                    {"text": "⚠ Заканчивается", "callback_data": f"LOW:{product[5]}"},
+                    {"text": "🛒 Купить", "callback_data": f"BUY:{product[5]}"},
+                ],
+                [{"text": "🍳 Рецепты", "callback_data": f"REC:{product[5]}"}],
+            ]
 
             edit(chat_id, message_id, text, inline_keyboard(buttons))
-
             return "ok"
 
-        if data_cb == "BACK":
+        if data_cb.startswith("REC:"):
 
-            show_products(
+            ingredient = data_cb.split(":")[1]
+            recipes = recipes_by_ingredient(ingredient)
+
+            if not recipes:
+                send(chat_id, "Пока не нашёл рецептов 👀")
+                return "ok"
+
+            buttons = []
+
+            for r in recipes:
+
+                buttons.append(
+                    [{"text": r["strMeal"], "callback_data": f"RECIPE:{r['idMeal']}"}]
+                )
+
+            edit(
                 chat_id,
-                data,
-                state["category"],
-                state["type"],
-                state["page"],
-                message_id
+                message_id,
+                "Вот что можно приготовить 👇",
+                inline_keyboard(buttons),
             )
-
             return "ok"
 
-        if data_cb.startswith("PAGE:"):
+        if data_cb.startswith("RECIPE:"):
 
-            delta = int(data_cb.split(":")[1])
+            recipe_id = data_cb.split(":")[1]
+            recipe = get_recipe(recipe_id)
 
-            show_products(
-                chat_id,
-                data,
-                state["category"],
-                state["type"],
-                state["page"] + delta,
-                message_id
-            )
+            text = f"🍳 {recipe['strMeal']}\n\n{recipe['strInstructions'][:800]}..."
 
+            edit(chat_id, message_id, text)
             return "ok"
 
-        if data_cb.startswith("EDIT:"):
+        if data_cb.startswith("HAVE:"):
 
-            row = int(data_cb.split(":")[1])
+            name = data_cb.split(":")[1]
 
-            user_state[chat_id] = {
-                "level": "edit_taste",
-                "row": row
-            }
+            set_product(name, status="есть")
 
-            send(chat_id, "Напиши новый вкус 👀")
-
+            send(chat_id, f"{name} отмечен как: есть")
             return "ok"
 
-        if data_cb.startswith("TR:"):
 
-            product = data_cb.split(":", 1)[1]
+        if data_cb.startswith("LOW:"):
 
-            user_state[chat_id] = {
-                "level": "add_translation",
-                "product": product
-            }
+            name = data_cb.split(":")[1]
 
-            send(chat_id, f"Напиши перевод для:\n{product}")
+            set_product(name, status="заканчивается")
+
+            send(chat_id, f"{name} заканчивается")
+            return "ok"
+
+
+        if data_cb.startswith("BUY:"):
+
+            name = data_cb.split(":")[1]
+
+            set_product(name, status="купить")
+
+            send(chat_id, f"{name} добавлен в список покупок")
 
             return "ok"
 
     return "ok"
-
 
 @app.route("/")
 def home():
