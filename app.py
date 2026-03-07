@@ -207,7 +207,6 @@ def webhook():
         typing(chat_id)
         human_pause()
 
-        maybe_reaction(chat_id)
 
         state = user_state.get(chat_id)
 

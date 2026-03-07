@@ -11025,12 +11025,73 @@ PHRASES = {
     ],
 }
 
-
 def phrase(group):
 
     options = PHRASES.get(group, [])
 
-    if not options:
+    clean = []
+
+    for p in options:
+
+        # пропускаем строки с размерами
+        if "×" in p:
+            continue
+
+        # пропускаем таймкоды
+        if ":" in p and "," in p:
+            continue
+
+        # пропускаем почти чистые цифры
+        if sum(c.isdigit() for c in p) > len(p) / 2:
+            continue
+
+        clean.append(p)
+
+    if not clean:
         return ""
 
-    return random.choice(options)
+    return random.choice(clean)
+
+def clean_phrases():
+
+        global PHRASES
+
+cleaned = {}
+
+for group, phrases in PHRASES.items():
+
+        good = []
+
+        for p in phrases:
+
+            if not p:
+                continue
+
+            p = p.strip()
+
+            # мусорные размеры изображений
+            if "×" in p:
+                continue
+
+            # таймкоды
+            if ":" in p and "," in p:
+                continue
+
+            # почти чистые цифры
+            digits = sum(c.isdigit() for c in p)
+
+            if digits > len(p) / 2:
+                continue
+
+            # слишком короткие
+            if len(p) < 2:
+                continue
+
+            good.append(p)
+
+        cleaned[group] = good
+
+PHRASES = cleaned
+
+
+clean_phrases()
