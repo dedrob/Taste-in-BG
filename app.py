@@ -183,7 +183,12 @@ def show_products(chat_id, data, category, type_name):
 
     for r in products:
 
-        row.append(r[5])
+        name = r[5]
+        emoji = emoji_for_product(name)
+
+        display_name = format_product_name(name)
+
+        row.append(f"{emoji} {name}")
 
         if len(row) == 2:
             buttons.append(row)
@@ -303,16 +308,6 @@ def handle_callback(update):
         "chat_id": chat_id,
         "data": data_cb
     })
-
-    if data_cb.startswith("TR:"):
-
-        name = data_cb.split(":")[1]
-
-        user_state[chat_id] = {"translate_product": name}
-
-        send(chat_id, "Введи перевод на болгарский")
-
-        return
     
     if data_cb.startswith("REC:"):
 
@@ -465,6 +460,9 @@ def handle_message(update):
         type_name = user_state[chat_id]["type"]
 
         products = get_products(data, category, type_name)
+
+        clean_text = text.split("/")[0].strip()
+        clean_text = clean_text.split(" ", 1)[-1]
 
         for r in products:
 
