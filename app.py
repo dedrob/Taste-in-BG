@@ -1,8 +1,27 @@
+import os
 import requests
 import time
 import random
 
 from flask import Flask, request
+app = Flask(__name__)
+
+TELEGRAM_URL = f"https://api.telegram.org/bot{TOKEN}"
+
+user_state = {}
+
+# ================= LOGS =================
+
+logs = []
+
+
+def log_event(event):
+
+    logs.append(event)
+
+    # храним максимум 100 событий
+    if len(logs) > 100:
+        logs.pop(0)
 
 from config import TOKEN
 from data import load_data
@@ -21,6 +40,15 @@ app = Flask(__name__)
 TELEGRAM_URL = f"https://api.telegram.org/bot{TOKEN}"
 
 user_state = {}
+logs = []
+def log_event(event):
+
+    logs.append(event)
+
+    # ограничим размер
+    if len(logs) > 100:
+        logs.pop(0)
+
 
 # ================= TELEGRAM =================
 
@@ -264,6 +292,12 @@ def handle_callback(update):
     data_cb = update["callback_query"]["data"]
 
     chat_id = update["callback_query"]["message"]["chat"]["id"]
+    
+    log_event({
+        "type": "callback",
+        "chat_id": chat_id,
+        "data": data_cb
+    })
 
     if data_cb.startswith("REC:"):
 
@@ -301,6 +335,12 @@ def handle_message(update):
     chat_id = message["chat"]["id"]
 
     text = message.get("text", "").strip()
+    
+    log_event({
+        "type": "message",
+        "chat_id": chat_id,
+        "text": text
+    })
 
     data = load_data()
 
@@ -384,19 +424,107 @@ def handle_message(update):
 
 # ================= WEBHOOK =================
 
-
-@app.route("/", methods=["POST"])
+@app.route("/", methods=["GET", "POST"])
 def webhook():
+
+    if request.method == "GET":
+        return "Bot is running"
 
     update = request.json
 
-    if "callback_query" in update:
-        handle_callback(update)
+    try:
 
-    if "message" in update:
-        handle_message(update)
+        if "callback_query" in update:
+            handle_callback(update)
+
+        if "message" in update:
+            handle_message(update)
+
+    except Exception as e:
+
+        log_event({
+            "type": "error",
+            "error": str(e),
+            "update": update
+        })
 
     return "ok"
+
+@app.route("/health", methods=["GET"])
+def health():
+
+    status = {
+        "server": "ok",
+        "google_sheets": "unknown",
+        "recipes_api": "unknown",
+        "stock": "unknown",
+        "products_loaded": 0
+    }
+
+    # Проверка Google Sheets
+    try:
+        data = load_data()
+        status["google_sheets"] = "ok"
+        status["products_loaded"] = len(data)
+    except Exception as e:
+        status["google_sheets"] = f"error: {str(e)}"
+
+    # Проверка рецептов API
+    try:
+        r = requests.get("https://www.themealdb.com/api/json/v1/1/search.php?s=egg", timeout=5)
+        if r.status_code == 200:
+            status["recipes_api"] = "ok"
+        else:
+            status["recipes_api"] = "error"
+    except:
+        status["recipes_api"] = "offline"
+
+    # Проверка stock.json
+    try:
+        stock = get_all()
+        status["stock"] = f"ok ({len(stock)} items)"
+    except Exception as e:
+        status["stock"] = f"error: {str(e)}"
+
+    return status
+
+@app.route("/debug", methods=["GET"])
+def debug():
+
+    info = {}
+
+    # последние продукты из Google Sheets
+    try:
+        data = load_data()
+        info["products_total"] = len(data)
+        info["products_sample"] = [row[5] for row in data[:10]]
+    except Exception as e:
+        info["products_error"] = str(e)
+
+    # состояние кухни
+    try:
+        stock = get_all()
+        info["stock_total"] = len(stock)
+        info["stock_items"] = list(stock.keys())[:10]
+    except Exception as e:
+        info["stock_error"] = str(e)
+
+    # состояние пользователей
+    try:
+        info["user_state"] = user_state
+    except Exception as e:
+        info["user_state_error"] = str(e)
+
+    return info
+
+# ================= LOGS =================
+
+@app.route("/logs", methods=["GET"])
+def show_logs():
+
+    return {
+        "logs": logs[-30:]
+    }
 
 if __name__ == "__main__":
     import os
