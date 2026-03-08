@@ -4,24 +4,6 @@ import time
 import random
 
 from flask import Flask, request
-app = Flask(__name__)
-
-TELEGRAM_URL = f"https://api.telegram.org/bot{TOKEN}"
-
-user_state = {}
-
-# ================= LOGS =================
-
-logs = []
-
-
-def log_event(event):
-
-    logs.append(event)
-
-    # храним максимум 100 событий
-    if len(logs) > 100:
-        logs.pop(0)
 
 from config import TOKEN
 from data import load_data
@@ -40,7 +22,12 @@ app = Flask(__name__)
 TELEGRAM_URL = f"https://api.telegram.org/bot{TOKEN}"
 
 user_state = {}
+
+# ================= LOGS =================
+
 logs = []
+
+
 def log_event(event):
 
     logs.append(event)
@@ -48,7 +35,6 @@ def log_event(event):
     # ограничим размер
     if len(logs) > 100:
         logs.pop(0)
-
 
 # ================= TELEGRAM =================
 
