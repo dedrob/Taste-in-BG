@@ -10,9 +10,11 @@ from data import load_data
 from catalog import get_categories, get_types, get_products
 from recipes import recipes_by_ingredient, get_recipe
 from stock import get_product, set_product, get_all
-from translations import format_product_name
+from translations import format_product_name, add_translation
 from utils import emoji_for_product, extract_taste_emojis
 from nlp_food import extract_ingredients
+from search import search_products
+from deep_translator import GoogleTranslator
 
 from phrases import THINKING, FOUND, NOT_FOUND, ACTION, COOK, phrase
 
@@ -68,6 +70,16 @@ def edit(chat_id, message_id, text, keyboard=None):
 
 # ================= KEYBOARDS =================
 
+def translate_to_ru(text):
+
+    if not text:
+        return text
+
+    try:
+        return GoogleTranslator(source="auto", target="ru").translate(text)
+
+    except:
+        return text
 
 def reply_keyboard(rows):
 
@@ -210,7 +222,7 @@ def show_product(chat_id, row):
             price = f"{stock['price']} лв"
 
     text = f"""
-{emoji} {format_product_name(name)}
+    {emoji} {format_product_name(name)}
 
 Вкус: {taste}
 {taste_emoji}
@@ -221,16 +233,23 @@ def show_product(chat_id, row):
 
     buttons = [
 
-        [{"text": "🍳 Рецепты", "callback_data": f"REC:{name}"}],
+    [{"text": "🍳 Рецепты", "callback_data": f"REC:{name}"}],
 
-        [
-            {"text": "✅ Есть", "callback_data": f"STOCK:{name}:есть"},
-            {"text": "⚠ Заканчивается", "callback_data": f"STOCK:{name}:мало"}
-        ],
+    [
+        {"text": "✅ Есть", "callback_data": f"STOCK:{name}:есть"},
+        {"text": "⚠ Заканчивается", "callback_data": f"STOCK:{name}:мало"}
+    ],
 
-        [{"text": "🛒 Купить", "callback_data": f"STOCK:{name}:купить"}]
+    [
+        {"text": "🛒 Купить", "callback_data": f"STOCK:{name}:купить"},
+        {"text": "💰 Цена", "callback_data": f"PRICE:{name}"}
+    ],
 
+    [
+        {"text": "🇧🇬 Перевести", "callback_data": f"TR:{name}"}
     ]
+
+]
 
     send(chat_id, text, inline_keyboard(buttons))
 
@@ -285,6 +304,16 @@ def handle_callback(update):
         "data": data_cb
     })
 
+    if data_cb.startswith("TR:"):
+
+        name = data_cb.split(":")[1]
+
+        user_state[chat_id] = {"translate_product": name}
+
+        send(chat_id, "Введи перевод на болгарский")
+
+        return
+    
     if data_cb.startswith("REC:"):
 
         ingredient = data_cb.split(":")[1]
@@ -298,9 +327,50 @@ def handle_callback(update):
             send(chat_id, phrase(NOT_FOUND))
             return
 
+        buttons = []
+
         for r in recipes[:5]:
 
-            send(chat_id, r["strMeal"])
+            title = translate_to_ru(r["strMeal"])
+
+            buttons.append([
+            {
+                "text": title,
+                "callback_data": f"RECIPE:{r['idMeal']}"
+            }
+        ])
+
+        send(chat_id, "Вот рецепты:", inline_keyboard(buttons))
+
+        return
+    
+    if data_cb.startswith("RECIPE:"):
+
+        recipe_id = data_cb.split(":")[1]
+
+        thinking(chat_id)
+
+        recipe = get_recipe(recipe_id)
+
+        if not recipe:
+
+            send(chat_id, "Рецепт не найден")
+            return
+
+        title = translate_to_ru(recipe["strMeal"])
+
+        instructions = translate_to_ru(recipe["strInstructions"])
+
+        text = f"""
+    🍳 {title}
+
+    📋 Инструкция:
+
+    {instructions[:1200]}
+    """
+        send(chat_id, text)
+    
+        return
 
     if data_cb.startswith("STOCK:"):
 
@@ -310,6 +380,15 @@ def handle_callback(update):
 
         send(chat_id, phrase(ACTION))
 
+    if data_cb.startswith("TR:"):
+
+        name = data_cb.split(":")[1]
+
+        user_state[chat_id] = {"translate": name}
+
+        send(chat_id, "Напиши перевод")
+
+        return
 
 # ================= MESSAGE =================
 
@@ -395,6 +474,48 @@ def handle_message(update):
 
                 show_product(chat_id, r)
                 return
+    
+    if chat_id in user_state and "translate_product" in user_state[chat_id]:
+
+        product = user_state[chat_id]["translate_product"]
+
+        add_translation(product, text)
+
+        send(chat_id, f"Сохранил перевод:\n{product} / {text}")
+
+        user_state.pop(chat_id)
+
+        return        
+    
+            # ================= SEARCH =================
+
+    results = search_products(text, data)
+
+    if results:
+
+        thinking(chat_id)
+
+        buttons = []
+        row = []
+
+        for r in results[:10]:
+
+            name = r[5]
+            emoji = emoji_for_product(name)
+
+            row.append(f"{emoji} {name}")
+
+            if len(row) == 2:
+                buttons.append(row)
+                row = []
+
+        if row:
+            buttons.append(row)
+
+        buttons.append(["⬅ Меню"])
+
+        send(chat_id, "Вот что нашёл", reply_keyboard(buttons))
+        return
 
     ingredients = extract_ingredients(text)
 
