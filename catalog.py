@@ -66,4 +66,4 @@ def total_pages(items):
     if not items:
         return 1
 
-from config import PAGE_SIZE
+    return (len(items) + PAGE_SIZE - 1) // PAGE_SIZE

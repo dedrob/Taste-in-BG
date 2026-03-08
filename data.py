@@ -21,8 +21,10 @@ def load_data():
 
     if _cache and now - _cache_time < CACHE_TTL:
         return _cache
-
-    response = requests.get(GOOGLE_SHEET_URL)
+    try:
+        response = requests.get(GOOGLE_SHEET_URL, timeout=10)
+    except:
+        return _cache if _cache else []
 
     content = response.content.decode("utf-8")
 

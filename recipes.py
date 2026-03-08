@@ -10,7 +10,10 @@ def recipes_by_ingredient(ingredient):
 
     r = requests.get(url)
 
-    data = r.json()
+    try:
+        data = r.json()
+    except:
+        return []
 
     if not data or not data["meals"]:
         return []
