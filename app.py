@@ -9,7 +9,7 @@ from translations import format_product_name, add_translation
 from utils import emoji_for_product, extract_taste_emojis
 from admin import update_taste, add_product
 from recipes import recipes_by_ingredient, get_recipe
-from stock import get_product, set_product, load_stock
+from stock import get_product, set_product, load as load_stock
 from speech_db import phrase
 from nlp_food import extract_ingredients
 import time
