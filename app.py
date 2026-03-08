@@ -308,12 +308,14 @@ def check_ingredients(ingredients):
 def recipes_from_home():
 
     products = []
+    
     stock_data = load_stock()
 
     if not stock_data:
         return []
 
     for name, info in stock_data.items():
+        
         if info.get("status") == "есть":
             products.append(name)
 
@@ -528,6 +530,33 @@ def webhook():
 
             return "ok"
 
+        # -------- рецепты из того что есть дома --------
+
+        if data_cb == "COOK":
+
+            recipes = recipes_from_home()
+
+            if not recipes:
+                send(chat_id, "Похоже дома пока нечего готовить 😅")
+                return "ok"
+
+            buttons = []
+
+            for r in recipes:
+
+                buttons.append([{
+                    "text": r["strMeal"],
+                    "callback_data": f"RECIPE:{r['idMeal']}"
+        }])
+
+                human_reply(
+                    chat_id,
+                    "thinking",
+                    "Сейчас посмотрю что можно приготовить из того что есть 👇",
+                    inline_keyboard(buttons)
+                )
+
+            return "ok"
     # ================= MESSAGE =================
 
     if "message" in update:

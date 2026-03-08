@@ -9,7 +9,11 @@ OUT_FILE = "speech_db.py"
 def clean_html(text):
 
     text = unescape(text)
+
+    # убираем html
     text = re.sub(r"<.*?>", " ", text)
+
+    # нормализуем пробелы
     text = re.sub(r"\s+", " ", text)
 
     return text.strip()
@@ -17,60 +21,60 @@ def clean_html(text):
 
 def split_phrases(text):
 
-    parts = re.split(r"[.!?\n]", text)
+    # убираем ссылки
+    text = re.sub(r"http\S+", " ", text)
+    text = re.sub(r"www\S+", " ", text)
+
+    # убираем эмодзи и спецсимволы
+    text = re.sub(r"[^\w\sа-яёіїєґ]", " ", text)
+
+    # нормализуем пробелы
+    text = re.sub(r"\s+", " ", text).lower()
 
     phrases = []
 
-    for p in parts:
+    # ищем фразы 1–6 слов из кириллицы
+    matches = re.findall(r"(?:[а-яёіїєґ]{1,20}\s?){1,6}", text)
 
-        p = p.strip().lower()
+    for m in matches:
 
-        if len(p) < 2:
+        p = m.strip()
+
+        if not p:
             continue
 
-        if len(p) > 120:
-            continue
-
-        # пропускаем чисто цифры
-        if p.isdigit():
-            continue
-
-        # пропускаем почти цифры
-        if re.match(r"^[0-9\s]+$", p):
+        if len(p) > 80:
             continue
 
         phrases.append(p)
 
     return phrases
 
-
 def classify(p):
 
-    if len(p.split()) <= 2:
-        return "reaction"
-
-    if any(w in p for w in ["щас", "сек", "сейчас", "гляну", "посмотрю"]):
+    if any(w in p for w in ["сек", "щас", "сейчас", "гляну", "подожди"]):
         return "thinking"
 
-    if any(w in p for w in ["рецепт", "приготов", "сделать"]):
+    if any(w in p for w in ["нашёл", "нашла", "вот", "смотри"]):
+        return "found"
+
+    if any(w in p for w in ["рецепт", "приготов", "сварить", "сделать"]):
         return "recipes"
 
-    if any(w in p for w in ["куп", "взять"]):
-        return "buy"
+    if any(w in p for w in ["нет", "ничего", "не нашёл", "не вижу"]):
+        return "error"
 
-    return "general"
+    return "reaction"
 
 
 def main():
 
     groups = {
-        "reaction": set(),
         "thinking": set(),
+        "reaction": set(),
+        "found": set(),
         "recipes": set(),
-        "buy": set(),
-        "low": set(),
-        "have": set(),
-        "general": set()
+        "error": set()
     }
 
     with zipfile.ZipFile(ZIP_FILE, "r") as z:
@@ -113,6 +117,8 @@ def main():
         f.write("}\n\n")
 
         f.write("""
+_last = {}
+
 def phrase(group):
 
     options = PHRASES.get(group, [])
@@ -120,7 +126,20 @@ def phrase(group):
     if not options:
         return ""
 
-    return random.choice(options)
+    import random
+
+    last = _last.get(group)
+
+    choices = [o for o in options if o != last]
+
+    if not choices:
+        choices = options
+
+    pick = random.choice(choices)
+
+    _last[group] = pick
+
+    return pick
 """)
 
     print("speech_db.py создан")
