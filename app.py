@@ -81,13 +81,6 @@ def load_data_cached():
 # ==========================================
 def send(chat_id, text, reply=None, inline=None):
 
-    # удалить прошлое сообщение бота
-    if chat_id in last_bot_message:
-        try:
-            delete_message(chat_id, last_bot_message[chat_id])
-        except:
-            pass
-
     payload = {
         "chat_id": chat_id,
         "text": text
@@ -99,32 +92,24 @@ def send(chat_id, text, reply=None, inline=None):
     if inline:
         payload["reply_markup"] = inline
 
-    r = requests.post(
-        f"{TELEGRAM_URL}/sendMessage",
-        json=payload
-    )
+    try:
 
-    data = r.json()
+        r = requests.post(
+            f"{TELEGRAM_URL}/sendMessage",
+            json=payload
+        )
 
-    if data.get("ok"):
-        last_bot_message[chat_id] = data["result"]["message_id"]
+        data = r.json()
+
+        if data.get("ok"):
+            last_bot_message[chat_id] = data["result"]["message_id"]
+
+    except:
+        pass
         
 # Создать функцию UI-обновления       
 def ui(chat_id, text, keyboard=None):
 
-    # если сообщение уже есть — редактируем
-    if chat_id in ui_message:
-
-        edit(
-            chat_id,
-            ui_message[chat_id],
-            text,
-            keyboard
-        )
-
-        return
-
-    # если нет — создаём
     payload = {
         "chat_id": chat_id,
         "text": text
@@ -133,6 +118,16 @@ def ui(chat_id, text, keyboard=None):
     if keyboard:
         payload["reply_markup"] = keyboard
 
+    # если UI уже есть — пробуем редактировать
+    if chat_id in ui_message:
+
+        try:
+            edit(chat_id, ui_message[chat_id], text, keyboard)
+            return
+        except:
+            pass
+
+    # иначе отправляем новое
     r = requests.post(
         f"{TELEGRAM_URL}/sendMessage",
         json=payload
@@ -141,7 +136,8 @@ def ui(chat_id, text, keyboard=None):
     data = r.json()
 
     if data.get("ok"):
-        ui_message[chat_id] = data["result"]["message_id"]      
+        ui_message[chat_id] = data["result"]["message_id"]
+             
 # ==========================================
 # Отправляет пользователю фото с подписью
 # Используется для рецептов блюд
@@ -233,8 +229,6 @@ def inline_keyboard(rows):
 def thinking(chat_id):
 
     send(chat_id, phrase(THINKING))
-
-    time.sleep(random.uniform(0.4, 0.7))
 
 # ================Добавить=продукт=============
 def add_product_to_catalog(category, type_name, name, taste):
@@ -806,28 +800,7 @@ def handle_callback(update):
  
  
 # Отправка сообщения с автоудалением
-def send_temp(chat_id, text, seconds=5):
 
-    r = requests.post(
-        f"{TELEGRAM_URL}/sendMessage",
-        json={
-            "chat_id": chat_id,
-            "text": text
-        }
-    )
-
-    data = r.json()
-
-    if not data["ok"]:
-        return
-
-    message_id = data["result"]["message_id"]
-
-    time.sleep(seconds)
-
-    delete_message(chat_id, message_id)
-    
-       
 # Главная функция обработки сообщений.
 # Определяет что написал пользователь:
 def handle_message(update):
@@ -963,7 +936,7 @@ def handle_message(update):
             with open("stock.json", "w", encoding="utf-8") as f:
                 json.dump({}, f, ensure_ascii=False, indent=2)
 
-            send_temp(chat_id, "Кухня очищена.")
+            send(chat_id, "Кухня очищена.")
 
             return
 
@@ -979,7 +952,7 @@ def handle_message(update):
 
         if not found:
 
-            send_temp(chat_id, "Этого продукта нет в кухне")
+            ui(chat_id, "Этого продукта нет в кухне")
 
             return
 
@@ -992,13 +965,16 @@ def handle_message(update):
             json.dump(stock, f, ensure_ascii=False, indent=2)
 
 
-        send_temp(chat_id, f"Удалили из кухни: {found}")
+        ui(chat_id, f"Удалили из кухни: {found}")
 
         return
 
 # ================= ОПРЕДЕЛЯЕМ КАТЕГОРИЮ =================
-    clean = text.split(" ", 1)[-1]
+    clean = text
 
+    if " " in text:
+        clean = text.split(" ", 1)[1]
+    
     categories = get_categories(data)
 
     if clean in categories:
@@ -1052,8 +1028,10 @@ def handle_message(update):
             return
 
 # убираем эмодзи и перевод из текста кнопки
-        clean_text = text.split("/")[0].strip()
-        clean_text = clean_text.split(" ", 1)[-1]
+    clean_text = text
+
+    if " " in text:
+        clean_text = text.split(" ", 1)[1].strip()
 
         for r in products:
 
@@ -1305,8 +1283,11 @@ def handle_message(update):
 
         categories = get_categories(data)
 
-        clean = text.split(" ", 1)[-1]
+        clean = text
 
+        if " " in text:
+            clean = text.split(" ", 1)[1]
+            
         if clean in categories:
 
             user_state[chat_id]["category"] = clean
