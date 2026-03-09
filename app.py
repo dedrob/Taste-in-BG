@@ -161,10 +161,10 @@ def thinking(chat_id):
 def show_menu(chat_id):
 
     buttons = [
-        ["📂 Каталог", "🍳 Что приготовить"],
-        ["➕ Добавить продукт"]
+        ["📂 Каталог"], 
+        ["🍳 Что приготовить"],
+        ["➕ Добавить продукт"],
         ["📦 Моя кухня"]
-        
     ]
 
     send(chat_id, "Я на кухне. Что смотрим?", reply_keyboard(buttons))
@@ -719,21 +719,11 @@ def webhook():
 
     update = request.json
 
-    try:
+    if "message" in update:
+        handle_message(update)
 
-        if "callback_query" in update:
-            handle_callback(update)
-
-        if "message" in update:
-            handle_message(update)
-
-    except Exception as e:
-
-        log_event({
-            "type": "error",
-            "error": str(e),
-            "update": update
-        })
+    if "callback_query" in update:
+        handle_callback(update)
 
     return "ok"
 
