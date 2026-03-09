@@ -267,16 +267,19 @@ def show_products(chat_id, data, category, type_name, page=0):
     nav = []
 
     if page > 0:
-        nav.append(f"⬅ PAGE:{page-1}")
+        nav.append("⬅")
 
     nav.append(f"{page+1}/{pages}")
 
     if page < pages - 1:
-        nav.append(f"PAGE:{page+1} ➡")
+        nav.append("➡")
 
     buttons.append(nav)
 
     buttons.append(["⬅ Типы"])
+
+    user_state.setdefault(chat_id, {})
+    user_state[chat_id]["page"] = page
 
     send(chat_id, phrase(FOUND), reply=reply_keyboard(buttons))
 
@@ -442,7 +445,12 @@ def handle_callback(update):
 
         thinking(chat_id)
 
-        recipes = recipes_by_ingredient(ingredient)
+        ingredient_en = format_product_name(ingredient)
+
+        if "/" in ingredient_en:
+            ingredient_en = ingredient_en.split("/")[-1].strip()
+
+        recipes = recipes_by_ingredient(ingredient_en)
 
         if not recipes:
 
@@ -541,20 +549,32 @@ def handle_message(update):
 
 # ================= ПАГИНАЦИЯ =================
     # пользователь нажал кнопку перехода страницы
-    if text.startswith("PAGE:"):
-
-        page = int(text.split(":")[1])
+    if text in ["⬅", "➡"]:
 
         state = user_state.get(chat_id)
 
-        if state and "category" in state and "type" in state:
+        if not state:
+            return
 
-            show_products(
-                chat_id,
-                data,
-                state["category"],
-                state["type"],
-                page
+        page = state.get("page", 0)
+
+        if text == "⬅":
+            page -= 1
+
+        if text == "➡":
+            page += 1
+
+        if page < 0:
+            page = 0
+
+        user_state[chat_id]["page"] = page
+
+        show_products(
+            chat_id,
+            data,
+            state["category"],
+            state["type"],
+            page
         )
 
         return
@@ -584,9 +604,23 @@ def handle_message(update):
 
 
  # ================= НАЗАД =================
-    if text.startswith("⬅"):
-
+    if text == "⬅ Меню":
         show_menu(chat_id)
+        user_state.pop(chat_id, None)
+        return
+
+    if text == "⬅ Категории":
+        show_categories(chat_id, data)
+        user_state.pop(chat_id, None)
+        return
+
+    if text == "⬅ Типы":
+
+        if chat_id in user_state and "category" in user_state[chat_id]:
+
+            show_types(chat_id, data, user_state[chat_id]["category"])
+            user_state[chat_id].pop("type", None)
+
         return
 
 
