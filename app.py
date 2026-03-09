@@ -399,7 +399,9 @@ def cook_assistant(chat_id):
 
     ingredient = random.choice(available)
 
-    recipes = recipes_by_ingredient(ingredient)
+    ingredient_en = format_product_name(ingredient).split("/")[-1].strip()
+
+    recipes = recipes_by_ingredient(ingredient_en)
 
     if not recipes:
 
@@ -626,11 +628,12 @@ def handle_message(update):
 
         for r in products:
 
-            if r[5].lower() == text.lower():
+            if r[5].lower() == clean_text.lower():
 
                 thinking(chat_id)
 
                 show_product(chat_id, r)
+                
                 return
  
  
