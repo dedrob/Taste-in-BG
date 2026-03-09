@@ -1,7 +1,5 @@
 # ================= PRODUCT EMOJI =================
 
-# ================= PRODUCT EMOJI =================
-
 PRODUCT_EMOJI = {
 
 # мясо
@@ -100,6 +98,46 @@ PRODUCT_EMOJI = {
 
 }
 
+SMART_EMOJI = {
+
+# орехи
+"фисташ": "🥜",
+"миндал": "🥜",
+"кешью": "🥜",
+"арахис": "🥜",
+
+# специи
+"паприк": "🌶",
+"карри": "🌶",
+"спец": "🧂",
+"перец": "🌶",
+
+# соусы
+"соус": "🥫",
+"кетчуп": "🍅",
+"майонез": "🥫",
+"горчиц": "🟡",
+
+# кремы
+"крем": "🍦",
+"паста": "🍫",
+
+# десерты
+"чизкейк": "🍰",
+"брауни": "🍫",
+"панкейк": "🥞",
+"вафл": "🧇",
+
+# напитки
+"матча": "🍵",
+"какао": "🍫",
+"смуси": "🧃",
+
+# растительное
+"тофу": "🧊",
+"соев": "🫘",
+
+}
 
 def emoji_for_product(name):
 
@@ -110,19 +148,53 @@ def emoji_for_product(name):
     if "заморож" in text or "замороз" in text:
         frozen = True
 
+    found = []
+
+    # 1 уровень — основной словарь
     for key, emoji in PRODUCT_EMOJI.items():
 
-        if key in text:
+        if key in text and emoji not in found:
+            found.append(emoji)
 
-            if frozen:
-                return f"❄️{emoji}"
+    # 2 уровень — умный словарь
+    for key, emoji in SMART_EMOJI.items():
 
-            return emoji
+        if key in text and emoji not in found:
+            found.append(emoji)
+
+    # если ничего не нашли
+    if not found:
+
+        # эвристика по словам
+        if "орех" in text:
+            found.append("🥜")
+
+        elif "крем" in text:
+            found.append("🍦")
+
+        elif "соус" in text:
+            found.append("🥫")
+
+        elif "сироп" in text:
+            found.append("🍯")
+
+        elif "паста" in text:
+            found.append("🍝")
+
+        elif "шокол" in text:
+            found.append("🍫")
+
+        else:
+            import random
+            found.append(random.choice(["🍽","🍴","🥣","🛒"]))
+
+    # максимум 2 эмодзи
+    result = "".join(found[:2])
 
     if frozen:
-        return "❄️🍽"
+        return f"❄️{result}"
 
-    return "🍽"
+    return result
 
 
 # ================= TASTE EMOJI =================
