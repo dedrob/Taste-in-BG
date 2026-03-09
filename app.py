@@ -27,6 +27,10 @@ TELEGRAM_URL = f"https://api.telegram.org/bot{TOKEN}"
 user_state = {}
 
 chat_memory = {}
+
+last_bot_message = {}
+
+ui_message = {}
 # ================= Логи =================
 
 logs = []
@@ -77,6 +81,13 @@ def load_data_cached():
 # ==========================================
 def send(chat_id, text, reply=None, inline=None):
 
+    # удалить прошлое сообщение бота
+    if chat_id in last_bot_message:
+        try:
+            delete_message(chat_id, last_bot_message[chat_id])
+        except:
+            pass
+
     payload = {
         "chat_id": chat_id,
         "text": text
@@ -88,10 +99,49 @@ def send(chat_id, text, reply=None, inline=None):
     if inline:
         payload["reply_markup"] = inline
 
-    requests.post(
+    r = requests.post(
         f"{TELEGRAM_URL}/sendMessage",
         json=payload
     )
+
+    data = r.json()
+
+    if data.get("ok"):
+        last_bot_message[chat_id] = data["result"]["message_id"]
+        
+# Создать функцию UI-обновления       
+def ui(chat_id, text, keyboard=None):
+
+    # если сообщение уже есть — редактируем
+    if chat_id in ui_message:
+
+        edit(
+            chat_id,
+            ui_message[chat_id],
+            text,
+            keyboard
+        )
+
+        return
+
+    # если нет — создаём
+    payload = {
+        "chat_id": chat_id,
+        "text": text
+    }
+
+    if keyboard:
+        payload["reply_markup"] = keyboard
+
+    r = requests.post(
+        f"{TELEGRAM_URL}/sendMessage",
+        json=payload
+    )
+
+    data = r.json()
+
+    if data.get("ok"):
+        ui_message[chat_id] = data["result"]["message_id"]      
 # ==========================================
 # Отправляет пользователю фото с подписью
 # Используется для рецептов блюд
@@ -129,7 +179,13 @@ def edit(chat_id, message_id, text, keyboard=None):
     if keyboard:
         payload["reply_markup"] = keyboard
 
-    requests.post(f"{TELEGRAM_URL}/editMessageText", json=payload)
+    try:
+        requests.post(
+            f"{TELEGRAM_URL}/editMessageText",
+            json=payload
+        )
+    except:
+        pass
 
 # Функиця удаления сообщений
 def delete_message(chat_id, message_id):
@@ -282,7 +338,7 @@ def show_categories(chat_id, data):
 
     buttons.append(["⬅ Меню"])
 
-    send(chat_id, "Выбирай категорию 👇", reply=reply_keyboard(buttons))
+    ui(chat_id, "Выбирай категорию 👇", reply_keyboard(buttons))
 
 # ==========================================
 # Показывает подкатегории выбранной категории.
@@ -309,7 +365,7 @@ def show_types(chat_id, data, category):
 
     buttons.append(["⬅ Категории"])
 
-    send(chat_id, category, reply=reply_keyboard(buttons))
+    ui(chat_id, category, reply_keyboard(buttons))
 
 # ==========================================
 # Показывает подкатегории выбранной категории.
@@ -362,7 +418,7 @@ def show_products(chat_id, data, category, type_name, page=0):
     user_state.setdefault(chat_id, {})
     user_state[chat_id]["page"] = page
 
-    send(chat_id, phrase(FOUND), reply=reply_keyboard(buttons))
+    ui(chat_id, phrase(FOUND), reply_keyboard(buttons))
 
 # ==========================================
 # Показывает карточку продукта.
@@ -815,6 +871,8 @@ def handle_message(update):
 
     text = message.get("text", "").strip()
     
+    delete_message(chat_id, message["message_id"])
+    
     user_msg_id = message["message_id"]
     
     # память последних сообщений
@@ -1085,14 +1143,17 @@ def handle_message(update):
 
                 added.append(f"{emoji} {name}")
 
-                add_history(f"Добавила: {name}")
+                add_history(f"Добавил: {name}")
 
             else:
 
                 ask_add_product(chat_id, item)
                 return
 
-        send(chat_id, "Добавила.\n\n" + "\n".join(added))
+        send(chat_id, "Добавил.\n\n" + "\n".join(added))
+        
+        delete_message(chat_id, user_msg_id)
+        
         return
 
 
@@ -1522,7 +1583,7 @@ def handle_message(update):
 
                 updated.append(f"{emoji} {ing}")
 
-            send(chat_id, "добавила\n\n" + "\n".join(updated))
+            send(chat_id, "добавил\n\n" + "\n".join(updated))
 
             return
 
@@ -1567,7 +1628,7 @@ def handle_message(update):
 
             replies_add = [
                 "ок, записала",
-                "добавила",
+                "добавил",
                 "принято",
                 "есть такое",
             ]
