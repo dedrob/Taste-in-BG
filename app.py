@@ -187,39 +187,6 @@ def edit(chat_id, message_id, text, keyboard=None):
     except:
         pass
 
-# Функиця удаления сообщений
-def delete_message(chat_id, message_id):
-
-    requests.post(
-        f"{TELEGRAM_URL}/deleteMessage",
-        json={
-            "chat_id": chat_id,
-            "message_id": message_id
-        }
-    )
-
-# Функция временного сообщения
-def send_temp(chat_id, text, seconds=4):
-
-    r = requests.post(
-        f"{TELEGRAM_URL}/sendMessage",
-        json={
-            "chat_id": chat_id,
-            "text": text
-        }
-    )
-
-    data = r.json()
-
-    if not data.get("ok"):
-        return
-
-    message_id = data["result"]["message_id"]
-
-    time.sleep(seconds)
-
-    delete_message(chat_id, message_id)
-
 # ================= KEYBOARDS =================
 # ==========================================
 # Редактирует уже отправленное сообщение.
@@ -871,8 +838,6 @@ def handle_message(update):
 
     text = message.get("text", "").strip()
     
-    delete_message(chat_id, message["message_id"])
-    
     user_msg_id = message["message_id"]
     
     # память последних сообщений
@@ -950,6 +915,14 @@ def handle_message(update):
         cook_assistant(chat_id)
         return
 
+# ================= МОЯ КУХНЯ =================
+    if text == "📦 Моя кухня":
+
+        thinking(chat_id)
+
+        show_kitchen(chat_id)
+
+        return
 
  # ================= НАЗАД =================
     if text == "⬅ Меню":
@@ -991,7 +964,6 @@ def handle_message(update):
                 json.dump({}, f, ensure_ascii=False, indent=2)
 
             send_temp(chat_id, "Кухня очищена.")
-            delete_message(chat_id, user_msg_id)
 
             return
 
@@ -1008,7 +980,6 @@ def handle_message(update):
         if not found:
 
             send_temp(chat_id, "Этого продукта нет в кухне")
-            delete_message(chat_id, user_msg_id)
 
             return
 
@@ -1022,7 +993,6 @@ def handle_message(update):
 
 
         send_temp(chat_id, f"Удалили из кухни: {found}")
-        delete_message(chat_id, user_msg_id)
 
         return
 
@@ -1152,7 +1122,6 @@ def handle_message(update):
 
         send(chat_id, "Добавил.\n\n" + "\n".join(added))
         
-        delete_message(chat_id, user_msg_id)
         
         return
 
