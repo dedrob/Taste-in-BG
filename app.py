@@ -739,37 +739,6 @@ def handle_message(update):
 @app.route("/", methods=["GET", "POST"])
 def webhook():
 
-    # если открыть сайт в браузере
-    if request.method == "GET":
-        return "Bot is running"
-
-    # получаем update от Telegram
-    update = request.get_json(silent=True)
-
-    # защита если update пустой
-# защита если update пустой
-    if not update:
-        return "ok"
-
-    try:
-
-        if "message" in update:
-            handle_message(update)
-
-        if "callback_query" in update:
-            handle_callback(update)
-
-    except Exception as e:
-
-        print("ERROR:", e)
-
-        log_event({
-            "type": "error",
-            "error": str(e)
-        })
-@app.route("/", methods=["GET", "POST"])
-def webhook():
-
     if request.method == "GET":
         return "Bot is running"
 
