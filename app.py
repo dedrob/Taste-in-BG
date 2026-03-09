@@ -49,19 +49,23 @@ def log_event(event):
 # text — текст сообщения
 # keyboard — клавиатура (если нужно показать кнопки)
 # ==========================================
-def send(chat_id, text, keyboard=None):
+def send(chat_id, text, reply=None, inline=None):
 
     payload = {
         "chat_id": chat_id,
         "text": text
     }
 
-    if keyboard:
-        payload["reply_markup"] = keyboard
+    if reply:
+        payload["reply_markup"] = reply
 
-    requests.post(f"{TELEGRAM_URL}/sendMessage", json=payload)
+    if inline:
+        payload["reply_markup"] = inline
 
-
+    requests.post(
+        f"{TELEGRAM_URL}/sendMessage",
+        json=payload
+    )
 # ==========================================
 # Отправляет пользователю фото с подписью
 # Используется для рецептов блюд
@@ -167,7 +171,7 @@ def show_menu(chat_id):
         ["📦 Моя кухня"]
     ]
 
-    send(chat_id, "Я на кухне. Что смотрим?", reply_keyboard(buttons))
+    send(chat_id, "Я на кухне. Что смотрим?", reply=reply_keyboard(buttons))
 
 
 # ==========================================
@@ -195,7 +199,7 @@ def show_categories(chat_id, data):
 
     buttons.append(["⬅ Меню"])
 
-    send(chat_id, "Выбирай категорию 👇", reply_keyboard(buttons))
+    send(chat_id, "Выбирай категорию 👇", reply=reply_keyboard(buttons))
 
 
 # ==========================================
@@ -223,7 +227,7 @@ def show_types(chat_id, data, category):
 
     buttons.append(["⬅ Категории"])
 
-    send(chat_id, category, reply_keyboard(buttons))
+    send(chat_id, category, reply=reply_keyboard(buttons))
 
 
 # ==========================================
@@ -274,7 +278,7 @@ def show_products(chat_id, data, category, type_name, page=0):
 
     buttons.append(["⬅ Типы"])
 
-    send(chat_id, phrase(FOUND), reply_keyboard(buttons))
+    send(chat_id, phrase(FOUND), reply=reply_keyboard(buttons))
 
 
 # ==========================================
@@ -337,7 +341,7 @@ def show_product(chat_id, row):
 
 ]
 
-    send(chat_id, text, inline_keyboard(buttons))
+    send(chat_id, text, inline=inline_keyboard(buttons))
 
 # ==========================================
 # Показывает все продукты которые есть дома
@@ -373,7 +377,7 @@ def show_kitchen(chat_id):
 
         text += line + "\n"
 
-    send(chat_id, text)
+    send(chat_id, text, reply=None)
 
 
 # ==========================================
@@ -401,6 +405,9 @@ def cook_assistant(chat_id):
 
     ingredient_en = format_product_name(ingredient).split("/")[-1].strip()
 
+    if "/" in ingredient_en:   
+        ingredient_en = ingredient_en.split("/")[-1].strip()
+        
     recipes = recipes_by_ingredient(ingredient_en)
 
     if not recipes:
@@ -455,7 +462,7 @@ def handle_callback(update):
             }
         ])
 
-        send(chat_id, "Вот рецепты:", inline_keyboard(buttons))
+        send(chat_id, "Вот рецепты:", inline=inline_keyboard(buttons))
 
         return
     
@@ -615,7 +622,10 @@ def handle_message(update):
             return
 
 
- # ================= ОТКРЫВАЕМ ПРОДУКТ =================
+# ================= ОТКРЫТИЕ ПРОДУКТА =================
+# Если пользователь находится внутри категории и типа,
+# проверяем не нажал ли он конкретный продукт
+
     if chat_id in user_state and "type" in user_state[chat_id]:
 
         category = user_state[chat_id]["category"]
@@ -623,19 +633,31 @@ def handle_message(update):
 
         products = get_products(data, category, type_name)
 
+# защита если список пуст
+        if not products:
+            send(chat_id, "Не нашлось")
+            return
+
+# убираем эмодзи и перевод из текста кнопки
         clean_text = text.split("/")[0].strip()
         clean_text = clean_text.split(" ", 1)[-1]
 
         for r in products:
 
-            if r[5].lower() == clean_text.lower():
+# защита от кривых строк
+            if len(r) < 6:
+                continue
+
+            name = r[5]
+
+            if name.lower() == clean_text.lower():
 
                 thinking(chat_id)
 
                 show_product(chat_id, r)
-                
+
                 return
- 
+
  
  # ================= ПЕРЕВОД ПРОДУКТА =================
     # Если пользователь нажал кнопку "🇧🇬 Перевести",
@@ -681,7 +703,7 @@ def handle_message(update):
 
         buttons.append(["⬅ Меню"])
 
-        send(chat_id, "Вот что нашёл", reply_keyboard(buttons))
+        send(chat_id, "Вот что нашёл", reply=reply_keyboard(buttons))
         return
 
 
@@ -717,19 +739,63 @@ def handle_message(update):
 @app.route("/", methods=["GET", "POST"])
 def webhook():
 
+    # если открыть сайт в браузере
     if request.method == "GET":
         return "Bot is running"
 
-    update = request.json
+    # получаем update от Telegram
+    update = request.get_json(silent=True)
 
-    if "message" in update:
-        handle_message(update)
+    # защита если update пустой
+# защита если update пустой
+    if not update:
+        return "ok"
 
-    if "callback_query" in update:
-        handle_callback(update)
+    try:
+
+        if "message" in update:
+            handle_message(update)
+
+        if "callback_query" in update:
+            handle_callback(update)
+
+    except Exception as e:
+
+        print("ERROR:", e)
+
+        log_event({
+            "type": "error",
+            "error": str(e)
+        })
+@app.route("/", methods=["GET", "POST"])
+def webhook():
+
+    if request.method == "GET":
+        return "Bot is running"
+
+    update = request.get_json(silent=True)
+
+    if not update:
+        return "ok"
+
+    try:
+
+        if "message" in update:
+            handle_message(update)
+
+        if "callback_query" in update:
+            handle_callback(update)
+
+    except Exception as e:
+
+        print("ERROR:", e)
+
+        log_event({
+            "type": "error",
+            "error": str(e)
+        })
 
     return "ok"
-
 
 # ==========================================
 # Проверяет здоровье бота:
