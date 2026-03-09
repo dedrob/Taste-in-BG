@@ -111,7 +111,6 @@ def send_photo(chat_id, photo_url, caption=None):
         json=payload
     )
 
-
 # ==========================================
 # Отправляет сообщение пользователю в Telegram.
 # chat_id — ID пользователя
@@ -167,7 +166,6 @@ def reply_keyboard(rows):
 # Используется для рецептов и карточек продукта.
 # ==========================================
 def inline_keyboard(rows):
-
     return {
         "inline_keyboard": rows
     }
@@ -182,8 +180,6 @@ def thinking(chat_id):
     send(chat_id, phrase(THINKING))
 
     time.sleep(random.uniform(0.4, 0.7))
-
-
 
 # ================Добавить=продукт=============
 def add_product_to_catalog(category, type_name, name, taste):
@@ -256,7 +252,6 @@ def show_categories(chat_id, data):
 
     send(chat_id, "Выбирай категорию 👇", reply=reply_keyboard(buttons))
 
-
 # ==========================================
 # Показывает подкатегории выбранной категории.
 # Например: категория "Напитки"
@@ -283,7 +278,6 @@ def show_types(chat_id, data, category):
     buttons.append(["⬅ Категории"])
 
     send(chat_id, category, reply=reply_keyboard(buttons))
-
 
 # ==========================================
 # Показывает подкатегории выбранной категории.
@@ -337,7 +331,6 @@ def show_products(chat_id, data, category, type_name, page=0):
     user_state[chat_id]["page"] = page
 
     send(chat_id, phrase(FOUND), reply=reply_keyboard(buttons))
-
 
 # ==========================================
 # Показывает карточку продукта.
@@ -474,7 +467,6 @@ def analyze_recipe_ingredients(recipe):
 
     return have, missing
 
-
 # Добавляем функцию извлечения ингредиентов рецепта
 def get_recipe_ingredients(recipe):
 
@@ -567,7 +559,7 @@ def cook_assistant(chat_id):
 
             if have:
                 text += "есть:\n"
-                "\n".join([f"{emoji_for_product(x)} {x}" for x in have])
+                text += "\n".join([f"{emoji_for_product(x)} {x}" for x in have])
                 text += "\n\n"
 
             text += "не хватает:\n"
@@ -577,7 +569,6 @@ def cook_assistant(chat_id):
 
         if len(shown) >= 6:
             break
-
 
 # Обрабатывает нажатия inline-кнопок.
 def handle_callback(update):
@@ -648,7 +639,6 @@ def handle_callback(update):
         return
     
 # RECIPE: id → открыть рецепт
-    # RECIPE: id → открыть рецепт
     if data_cb.startswith("RECIPE:"):
 
         recipe_id = data_cb.split(":")[1]
@@ -674,25 +664,57 @@ def handle_callback(update):
 
     {instructions[:1000]}
     """
-
-    buttons = [
+        buttons = [
         [
             {
-                "text": "➕ Добавить ингредиенты в кухню",
-                "callback_data": f"ADD_RECIPE:{recipe_id}"
+            "text": "➕ Добавить ингредиенты в кухню",
+            "callback_data": f"ADD_RECIPE:{recipe_id}"
             }
         ]
     ]
 
-    send(
-        chat_id,
-        text,
-        inline=inline_keyboard(buttons)
+        send(
+            chat_id,
+            text,
+            inline=inline_keyboard(buttons)
     )
 
-    send_photo(chat_id, photo)
+        send_photo(chat_id, photo)
 
-    return
+        return
+
+# добавить ингредиенты рецепта в кухню
+    if data_cb.startswith("ADD_RECIPE:"):
+
+        recipe_id = data_cb.split(":")[1]
+
+        recipe = get_recipe(recipe_id)
+
+        if not recipe:
+            send(chat_id, "Не получилось открыть рецепт")
+            return
+
+        ingredients = get_recipe_ingredients(recipe)
+
+        added = []
+
+        for ing in ingredients:
+
+            set_product(ing, status="есть")
+
+            emoji = emoji_for_product(ing)
+
+            added.append(f"{emoji} {ing}")
+
+            add_history(f"Добавил из рецепта: {ing}")
+
+        send(
+            chat_id,
+            "Добавила ингредиенты:\n\n" + "\n".join(added)
+        )
+
+        return
+
 
 # STOCK → изменить статус продукта
     if data_cb.startswith("STOCK:"):
@@ -702,6 +724,9 @@ def handle_callback(update):
         set_product(name, status=status)
 
         send(chat_id, phrase(ACTION))
+
+        return
+
 
 # TR → добавить перевод
     if data_cb.startswith("TR:"):
@@ -714,7 +739,6 @@ def handle_callback(update):
 
         return
     
-
 # Главная функция обработки сообщений.
 # Определяет что написал пользователь:
 def handle_message(update):
@@ -1290,7 +1314,6 @@ def handle_message(update):
         send(chat_id, "Вот что нашёл", reply=reply_keyboard(buttons))
         return
 
-    
 # ==========================================
 # Главная точка входа Telegram webhook.
 # Принимает обновления от Telegram
@@ -1325,40 +1348,7 @@ def webhook():
         })
 
     return "ok"
-
-
-# добавить ингредиенты рецепта в кухню
-if data_cb.startswith("ADD_RECIPE:"):
-
-    recipe_id = data_cb.split(":")[1]
-
-    recipe = get_recipe(recipe_id)
-
-    if not recipe:
-        send(chat_id, "Не получилось открыть рецепт")
-        return
-
-    ingredients = get_recipe_ingredients(recipe)
-
-    added = []
-
-    for ing in ingredients:
-
-        set_product(ing, status="есть")
-
-        emoji = emoji_for_product(ing)
-
-        added.append(f"{emoji} {ing}")
-
-        add_history(f"Добавил из рецепта: {ing}")
-
-    send(
-        chat_id,
-        "Добавила ингредиенты:\n\n" + "\n".join(added)
-    )
-
-    return
-    
+ 
 # ==========================================
 # Проверяет здоровье бота:
 # - сервер
@@ -1404,7 +1394,6 @@ def health():
         status["stock"] = f"error: {str(e)}"
 
     return status
-
 
 # ==========================================
 # Показывает диагностическую информацию:
