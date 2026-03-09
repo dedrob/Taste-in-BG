@@ -1591,7 +1591,8 @@ def handle_message(update):
     # Если пользователь написал что-то вроде:
     # "у меня есть бекон яйца"
     # бот извлекает ингредиенты и добавляет их в stock.json.
-
+    text = text.replace(",", " ")
+    
     ingredients = extract_ingredients(text)
 
     if ingredients:
