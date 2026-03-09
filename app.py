@@ -836,15 +836,51 @@ def handle_message(update):
 
         return
 
-# ================= ОЧИСТИТЬ КУХНЮ =================
-    if text in ["clear кухня", "reset кухня"]:
+# удалить продукт / очистить кухню
+    if text.startswith("удали"):
+
+        arg = text.replace("удали", "").strip().lower()
 
         stock = get_all()
 
-        for name in list(stock.keys()):
-            set_product(name, status="купить")
+        # удалить всю кухню
+        if arg in ["всё", "все", "кухню"]:
 
-        send(chat_id, "Кухня очищена.")
+            if not stock:
+                send(chat_id, "Кухня уже пустая.")
+                return
+
+            import json
+
+            with open("stock.json", "w", encoding="utf-8") as f:
+                json.dump({}, f)
+
+            send(chat_id, "Кухня очищена.")
+            return
+
+# удалить конкретный продукт
+        results = search_products(arg, data)
+
+        if not results:
+            send(chat_id, "Не нашла такой продукт")
+            return
+
+        name = results[0][5]
+
+        if name in stock:
+
+            del stock[name]
+
+            import json
+
+            with open("stock.json", "w", encoding="utf-8") as f:
+                json.dump(stock, f, ensure_ascii=False, indent=2)
+
+            send(chat_id, f"Удалили из кухни: {name}")
+
+        else:
+            send(chat_id, "Этого продукта нет в кухне")
+
         return
 
 # ================= ОПРЕДЕЛЯЕМ КАТЕГОРИЮ =================
@@ -1088,6 +1124,40 @@ def handle_message(update):
 
         return
     
+# очистить список покупок
+    if text.lower() in [
+        "очисти покупки",
+        "очистить покупки",
+        "убери покупки",
+        "удали покупки",
+        "очисти список покупок",
+        "очистить список покупок"
+    ]:
+
+        stock = get_all()
+
+        if not stock:
+            send(chat_id, "Кухня пустая.")
+            return
+
+        cleaned = {}
+
+        for name, data in stock.items():
+
+            status = data.get("status")
+
+            if status in ["есть", "мало"]:
+                cleaned[name] = data
+
+        import json
+
+        with open("stock.json", "w", encoding="utf-8") as f:
+            json.dump(cleaned, f, ensure_ascii=False, indent=2)
+
+        send(chat_id, "Список покупок очищен.")
+
+        return
+       
 #Команда "закупка"
     if text == "закупка":
 
@@ -1271,17 +1341,46 @@ def handle_message(update):
     # Если пользователь написал что-то вроде:
     # "у меня есть бекон яйца"
     # бот извлекает ингредиенты и добавляет их в stock.json.
+    # ================= УМНОЕ ПОНИМАНИЕ ФРАЗ =================
+
     ingredients = extract_ingredients(text)
-    
+
     if ingredients:
+
+        lower = text.lower()
+
+        status = "есть"
+
+        # определяем смысл фразы
+        if any(w in lower for w in ["закончил", "кончился", "нет", "закончились"]):
+            status = "купить"
+
+        if any(w in lower for w in ["купил", "купила", "взял", "взяла"]):
+            status = "есть"
+
+        if any(w in lower for w in ["добавь", "добавила", "добавил"]):
+            status = "есть"
+
+        updated = []
 
         for ing in ingredients:
 
-            set_product(ing, status="есть")
-            
-            add_history(f"Добавил: {ing}")
-            
-        send(chat_id, phrase(ACTION))
+            set_product(ing, status=status)
+
+            emoji = emoji_for_product(ing)
+
+            updated.append(f"{emoji} {ing}")
+
+            if status == "есть":
+                add_history(f"Добавила: {ing}")
+            else:
+                add_history(f"Закончился: {ing}")
+
+        if status == "есть":
+            send(chat_id, "Добавила.\n\n" + "\n".join(updated))
+        else:
+            send(chat_id, "Отметила.\n\n" + "\n".join(updated))
+
         return
     
 # ================= ПОИСК ПРОДУКТА =================
