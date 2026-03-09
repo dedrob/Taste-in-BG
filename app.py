@@ -14,7 +14,6 @@ from translations import format_product_name, add_translation
 from utils import emoji_for_product, extract_taste_emojis
 from nlp_food import extract_ingredients
 from search import search_products
-from deep_translator import GoogleTranslator
 
 from phrases import THINKING, FOUND, NOT_FOUND, ACTION, COOK, phrase
 
@@ -118,9 +117,11 @@ def translate_to_ru(text):
         return text
 
     try:
+        from deep_translator import GoogleTranslator
         return GoogleTranslator(source="auto", target="ru").translate(text)
 
-    except:
+    except Exception as e:
+        print("translate error:", e)
         return text
 
 # ==========================================
@@ -916,8 +917,6 @@ def show_logs():
 
     return f"<pre>{text}</pre>"
 
-
-import os
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
