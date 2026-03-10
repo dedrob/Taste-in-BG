@@ -223,6 +223,18 @@ def inline_keyboard(rows):
         "inline_keyboard": rows
     }
 
+
+# Очистка кнопки от эмодзи и лишних слов для сравнения с названием продукта.
+def clean_button(text):
+
+    if not text:
+        return text
+
+    # убрать эмодзи в начале кнопки
+    if " " in text:
+        return text.split(" ", 1)[1]
+
+    return text
 # ==========================================
 # Создаёт inline-кнопки (кнопки внутри сообщения).
 # Используется для рецептов и карточек продукта.
@@ -833,6 +845,9 @@ def handle_message(update):
     chat_id = message["chat"]["id"]
 
     text = message.get("text", "").strip()
+    
+    clean_text = clean_button(text)
+    
     lower = text.lower()
 
     # ================= ПАМЯТЬ =================
@@ -955,12 +970,12 @@ def handle_message(update):
 
     categories = get_categories(data)
 
-    if text in categories:
+    if clean_text in categories:
 
         thinking(chat_id)
 
         user_state[chat_id] = {
-            "category": text
+            "category": clean_text
         }
 
         show_types(chat_id, data, text)
@@ -974,13 +989,12 @@ def handle_message(update):
 
         types = get_types(data, category)
 
-        if text in types:
+        if clean_text in types:
 
             thinking(chat_id)
 
-            user_state[chat_id]["type"] = text
-
-            show_products(chat_id, data, category, text)
+            user_state[chat_id]["type"] = clean_text
+            show_products(chat_id, data, category, clean_text)
             return
 
     # ================= ОТКРЫТИЕ ПРОДУКТА =================
@@ -999,7 +1013,7 @@ def handle_message(update):
 
             name = r[5]
 
-            clean = text.split(" ", 1)[-1].lower()
+            clean = clean_text.lower()
 
             if name.lower() == clean:
 
@@ -1042,7 +1056,7 @@ def handle_message(update):
 
                         candidate = r[5].lower()
 
-                        if candidate.startswith(item.lower()):
+                        if candidate == item.lower():
                             name = r[5]
                             break
 
