@@ -34,9 +34,17 @@ def save_translations():
 
 # ================= GET =================
 
-def get_translation(product):
+def get_translation(name):
 
-    return translations.get(product)
+    try:
+
+        with open("translations.json", encoding="utf-8") as f:
+            data = json.load(f)
+
+        return data.get(name)
+
+    except:
+        return None
 
 
 # ================= ADD =================
@@ -50,15 +58,14 @@ def add_translation(product, translation):
 
 # ================= FORMAT =================
 
-def format_product_name(product):
+def format_product_name(name):
 
-    tr = get_translation(product)
+    translation = get_translation(name)
 
-    if tr:
+    if translation:
+        return f"{name} ({translation})"
 
-        return f"{product} / {tr}"
-
-    return product
+    return name
 
 
 # ================= INIT =================
