@@ -24,6 +24,13 @@ app = Flask(__name__)
 
 TELEGRAM_URL = f"https://api.telegram.org/bot{TOKEN}"
 
+ingredient_map = {}
+
+try:
+    ingredient_map = load_ingredient_map()
+except Exception as e:
+    print("ingredient map load error:", e)
+
 user_state = {}
 
 chat_memory = {}
@@ -32,7 +39,7 @@ last_bot_message = {}
 
 ui_message = {}
 
-ingredient_map = load_ingredient_map()
+
 # ================= Логи =================
 
 logs = []

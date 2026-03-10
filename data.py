@@ -23,6 +23,9 @@ def load_data():
         return _cache
     try:
         response = requests.get(GOOGLE_SHEET_URL, timeout=10)
+
+        if response.status_code != 200:
+            return _cache if _cache else []
     except:
         return _cache if _cache else []
 
@@ -89,7 +92,7 @@ def load_ingredient_map():
     from config import GOOGLE_SHEET_URL
 
     # второй лист таблицы
-    url = GOOGLE_SHEET_URL + "&gid=11945827954"
+    url = GOOGLE_SHEET_URL + "&gid=1945827954"
 
     try:
         response = requests.get(url, timeout=10)
