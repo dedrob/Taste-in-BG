@@ -231,10 +231,9 @@ def clean_button(text):
     if not text:
         return text
 
-    # убираем emoji в начале кнопки
     parts = text.split(" ")
 
-    if len(parts) > 1 and len(parts[0]) <= 2:
+    if len(parts) > 1:
         return " ".join(parts[1:]).strip()
 
     return text.strip()
@@ -998,9 +997,8 @@ def handle_message(update):
 
         thinking(chat_id)
 
-        user_state[chat_id] = {
-            "category": clean_text
-        }
+        user_state.setdefault(chat_id, {})
+        user_state[chat_id]["category"] = clean_text
 
         show_types(chat_id, data, clean_text)
         return
@@ -1071,7 +1069,7 @@ def handle_message(update):
 
             clean = clean_text.lower()
 
-            if clean in name.lower() == clean:
+            if clean == name.lower():
 
                 thinking(chat_id)
                 show_product(chat_id, r)

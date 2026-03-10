@@ -89,7 +89,7 @@ def load_ingredient_map():
     from config import GOOGLE_SHEET_URL
 
     # второй лист таблицы
-    url = GOOGLE_SHEET_URL.replace("gid=0", "gid=1")
+    url = GOOGLE_SHEET_URL + "&gid=11945827954"
 
     try:
         response = requests.get(url, timeout=10)
