@@ -81,3 +81,38 @@ def build_index(data):
 def get_index():
 
     return _index
+
+# ================= LOAD INGREDIENT MAP =================
+
+def load_ingredient_map():
+
+    from config import GOOGLE_SHEET_URL
+
+    # второй лист таблицы
+    url = GOOGLE_SHEET_URL.replace("gid=0", "gid=1")
+
+    try:
+        response = requests.get(url, timeout=10)
+    except:
+        return {}
+
+    content = response.content.decode("utf-8")
+
+    reader = csv.reader(io.StringIO(content))
+
+    next(reader)
+
+    mapping = {}
+
+    for row in reader:
+
+        if len(row) < 2:
+            continue
+
+        synonyms = row[0].lower().split(",")
+        ingredient_en = row[1].strip().lower()
+
+        for s in synonyms:
+            mapping[s.strip()] = ingredient_en
+
+    return mapping

@@ -6,11 +6,10 @@ import random
 from flask import Flask, request
 
 from config import TOKEN, APPS_SCRIPT_URL
-from data import load_data
+from data import load_data, load_ingredient_map
 data_cache = None
 data_cache_time = 0
 from catalog import get_categories, get_types, get_products
-from deep_translator import GoogleTranslator
 from recipes import recipes_by_ingredient, get_recipe
 from stock import get_product, set_product, get_all
 from translations import format_product_name, add_translation
@@ -32,6 +31,8 @@ chat_memory = {}
 last_bot_message = {}
 
 ui_message = {}
+
+ingredient_map = load_ingredient_map()
 # ================= Логи =================
 
 logs = []
@@ -230,11 +231,13 @@ def clean_button(text):
     if not text:
         return text
 
-    # убрать эмодзи в начале кнопки
-    if " " in text:
-        return text.split(" ", 1)[1]
+    # убираем emoji в начале кнопки
+    parts = text.split(" ")
 
-    return text
+    if len(parts) > 1 and len(parts[0]) <= 2:
+        return " ".join(parts[1:]).strip()
+
+    return text.strip()
 # ==========================================
 # Создаёт inline-кнопки (кнопки внутри сообщения).
 # Используется для рецептов и карточек продукта.
@@ -500,25 +503,38 @@ def analyze_recipe_ingredients(recipe):
     have = []
     missing = []
 
+    # переведём продукты кухни в английские ингредиенты
+    stock_ingredients = []
+
+    for name, product_data in stock.items():
+
+        if product_data.get("status") != "есть":
+            continue
+
+        ing_en = ingredient_map.get(
+            name.lower(),
+            name.lower()
+        )
+
+        stock_ingredients.append(ing_en.split()[0])
+
     for i in range(1, 21):
 
         ing = recipe.get(f"strIngredient{i}")
+
         if not ing:
             continue
 
-        ing = ing.strip().lower()
+        ing = ing.strip().lower().split()[0]
 
         if not ing:
             continue
 
         found = False
 
-        for name, data in stock.items():
+        for s in stock_ingredients:
 
-            name_clean = format_product_name(name).lower()
-
-            if ing in name_clean or name_clean in ing:
-
+            if ing in s or s in ing:
                 found = True
                 break
 
@@ -564,23 +580,23 @@ def cook_assistant(chat_id):
     ]
 
     if not available:
-
         send(chat_id, "Дома пусто")
         return
 
-    send(chat_id, "Смотрю что можно приготовить...")
+    send(chat_id, "ща чекну че можно сделать...")
 
     found = []
 
     for ingredient in random.sample(available, min(3, len(available))):
 
-        ingredient_en = format_product_name(ingredient)
+        # перевод через таблицу ингредиентов
+        ingredient_en = ingredient_map.get(
+            ingredient.lower(),
+            ingredient.lower()
+        ).split()[0]
 
-        if "/" in ingredient_en:
-            ingredient_en = ingredient_en.split("/")[-1].strip()
+        ingredient_en = ingredient_en.split()[0]
 
-        ingredient_en = ingredient_en.split()[0].lower()
-         
         recipes = recipes_by_ingredient(ingredient_en)
 
         if recipes:
@@ -590,10 +606,8 @@ def cook_assistant(chat_id):
 
     if not found:
 
-        send(chat_id, "Ну хер его что из этого можно сделать")
+        send(chat_id, "ну хер его что из этого можно сделать")
         return
-
-    send(chat_id, phrase(COOK))
 
     shown = set()
 
@@ -611,13 +625,13 @@ def cook_assistant(chat_id):
         recipes_scored.append((len(missing), r, recipe))
 
     recipes_scored.sort(key=lambda x: x[0])
-    
+
     send(chat_id, random.choice([
-        "Нашел рецепты 👇",
-        "Вот что можно приготовить 👇",
-        "Самые простые рецепты 👇"
+        "нашел рецепты 👇",
+        "вот что можно заебашить 👇",
+        "самые легкие 👇"
     ]))
-    
+
     for _, r, recipe in recipes_scored:
 
         if r["idMeal"] in shown:
@@ -649,13 +663,14 @@ def cook_assistant(chat_id):
 
         if len(shown) >= 6:
             break
-
 # Обрабатывает нажатия inline-кнопок.
 def handle_callback(update):
 
     data_cb = update["callback_query"]["data"]
 
     chat_id = update["callback_query"]["message"]["chat"]["id"]
+    
+    data = load_data_cached()
     
     log_event({
         "type": "callback",
@@ -670,7 +685,7 @@ def handle_callback(update):
 
         if value == "NO":
 
-            send(chat_id, "Ок. Не добавляем.")
+            send(chat_id, "ок. не добавляем.")
             show_menu(chat_id)
             return
 
@@ -679,7 +694,7 @@ def handle_callback(update):
             "name": value
         }
 
-        send(chat_id, f"{value}\n\nНапиши вкус.")
+        send(chat_id, f"{value}\n\nопиши вкус.")
         return
     
 # REC: продукт → список рецептов
@@ -689,14 +704,12 @@ def handle_callback(update):
 
         thinking(chat_id)
 
-        try:
-            ingredient_en = GoogleTranslator(source="auto", target="en").translate(ingredient)
-        except:
-            ingredient_en = ingredient
+        ingredient_en = ingredient_map.get(
+            ingredient.lower(),
+            ingredient.lower()
+        ).split()[0]
 
-            ingredient_en = ingredient_en.lower()
-
-            recipes = recipes_by_ingredient(ingredient_en)
+        recipes = recipes_by_ingredient(ingredient_en)
 
         if not recipes:
 
@@ -716,7 +729,7 @@ def handle_callback(update):
             }
         ])
 
-        send(chat_id, "Вот рецепты:", inline=inline_keyboard(buttons))
+        send(chat_id, "вот рецепты:", inline=inline_keyboard(buttons))
 
         return
     
@@ -730,7 +743,7 @@ def handle_callback(update):
         recipe = get_recipe(recipe_id)
 
         if not recipe:
-            send(chat_id, "Рецепт не найден")
+            send(chat_id, "не нашел что можно приготовить")
             return
 
         title = translate_to_ru(recipe["strMeal"])
@@ -786,7 +799,7 @@ def handle_callback(update):
         recipe = get_recipe(recipe_id)
 
         if not recipe:
-            send(chat_id, "Не открывается")
+            send(chat_id, "не открывается")
             return
 
         added = []
@@ -795,17 +808,24 @@ def handle_callback(update):
 
         for ing in missing:
 
-            set_product(ing, status="есть")
+            results = search_products(ing, data)
 
-            emoji = emoji_for_product(ing)
+            if results:
+                name = results[0][5]
+            else:
+                name = ing
+
+            set_product(name, status="есть")
+
+            emoji = emoji_for_product(name)
 
             added.append(f"{emoji} {ing}")
 
-            add_history(f"Добавил из рецепта: {ing}")
+            add_history(f"добавил из рецепта: {ing}")
 
         send(
             chat_id,
-            "Добавил ингредиенты:\n\n" + "\n".join(added)
+            "добавил ингредиенты:\n\n" + "\n".join(added)
         )
 
         return
@@ -830,7 +850,7 @@ def handle_callback(update):
 
         user_state[chat_id] = {"translate_product": name}
 
-        send(chat_id, "Напиши перевод")
+        send(chat_id, "напиши перевод")
 
         return
  
@@ -847,8 +867,8 @@ def handle_message(update):
     text = message.get("text", "").strip()
     
     clean_text = clean_button(text)
-    
-    lower = text.lower()
+
+    lower = clean_text.lower()
 
     # ================= ПАМЯТЬ =================
 
@@ -877,7 +897,7 @@ def handle_message(update):
 
         add_translation(product, text)
 
-        send(chat_id, f"Сохранил перевод:\n{product} ({text})")
+        send(chat_id, f"запомнил перевод:\n{product} ({text})")
 
         user_state.pop(chat_id)
 
@@ -918,7 +938,7 @@ def handle_message(update):
 
         user_state[chat_id] = {"bulk_add": True}
 
-        send(chat_id, "Пиши продукты по одному.\n\nНапиши 'стоп' чтобы закончить.")
+        send(chat_id, "пиши продукты по одному.\n\nнапиши когда закончишь.")
 
         return
 
@@ -930,7 +950,7 @@ def handle_message(update):
 
             user_state.pop(chat_id)
 
-            send(chat_id, "Ок, закончили.")
+            send(chat_id, "кк, закончили.")
             return
 
         name = text.strip()
@@ -978,7 +998,7 @@ def handle_message(update):
             "category": clean_text
         }
 
-        show_types(chat_id, data, text)
+        show_types(chat_id, data, clean_text)
         return
 
     # ================= ТИПЫ =================
@@ -1015,7 +1035,7 @@ def handle_message(update):
 
             clean = clean_text.lower()
 
-            if name.lower() == clean:
+            if clean in name.lower() == clean:
 
                 thinking(chat_id)
                 show_product(chat_id, r)
@@ -1028,8 +1048,8 @@ def handle_message(update):
         items = text.split(" ", 1)[1]
 
         items = [
-            x for x in items.replace(",", " ").split()
-            if x.lower() not in ["и","and"]
+            x.strip()
+            for x in items.split(",")
         ]
 
         added = []
@@ -1069,7 +1089,7 @@ def handle_message(update):
 
                 added.append(f"{emoji} {name}")
 
-                add_history(f"Добавил: {name}")
+                add_history(f"добавил: {name}")
 
             else:
 
@@ -1077,49 +1097,62 @@ def handle_message(update):
                 return
 
         if added:
-            send(chat_id, "Добавил.\n\n" + "\n".join(added))
+            send(chat_id, "добавил.\n\n" + "\n".join(added))
 
         return
 
     
-    # ================= УДАЛИТЬ ПРОДУКТ =================
+    # ================= УДАЛЕНИЕ ПРОДУКТА / ОЧИСТКА КУХНИ =================
 
     if lower.startswith("удали"):
 
-        item = text.replace("удали", "").strip()
-
-        if not item:
-            send(chat_id, "Что удалить?")
-            return
-
-        results = search_products(item, data)
-
-        if not results:
-
-            send(chat_id, "Не нашла такой продукт.")
-            return
-
-        name = results[0][5]
+        item = clean_text.replace("удали", "").strip()
 
         stock = get_all()
 
-        if name not in stock:
+        # удалить всю кухню
+        if item in ["всё", "все", "кухню", "кухня", "всю кухню"]:
 
-            send(chat_id, "Этого продукта нет на кухне.")
+            if not stock:
+                send(chat_id, "на кухне и так ничего нет")
+                return
+
+            import json
+
+            with open("stock.json", "w", encoding="utf-8") as f:
+                json.dump({}, f, ensure_ascii=False, indent=2)
+
+            send(chat_id, "всё почистил.")
             return
 
-        stock.pop(name)
+        # если не указали продукт
+        if not item:
+            send(chat_id, "шо удалить?")
+            return
+
+        # ищем продукт в кухне
+        name = None
+
+        for product in stock:
+
+            if item.lower() in product.lower():
+                name = product
+                break
+
+        if not name:
+
+            send(chat_id, "ниче такого не нашел")
+            return
+
+        # удаляем продукт
+        del stock[name]
 
         import json
 
         with open("stock.json", "w", encoding="utf-8") as f:
             json.dump(stock, f, ensure_ascii=False, indent=2)
 
-        emoji = emoji_for_product(name)
-
-        send(chat_id, f"Убрала:\n\n{emoji} {name}")
-
-        add_history(f"Удалил: {name}")
+        send(chat_id, f"удалил: {name}")
 
         return
     
@@ -1161,10 +1194,10 @@ def handle_message(update):
 
                 updated.append(f"{emoji} {name}")
 
-                add_history(f"Купила: {name}")
+                add_history(f"купил: {name}")
 
         if updated:
-            send(chat_id, "Отметила.\n\n" + "\n".join(updated))
+            send(chat_id, "отметил.\n\n" + "\n".join(updated))
 
         return
 
@@ -1230,10 +1263,10 @@ def handle_message(update):
                 items.append(f"{emoji} {format_product_name(name)}")
 
         if not items:
-            send(chat_id, "На кухне пусто.")
+            send(chat_id, "на кухне пусто.")
             return
 
-        send(chat_id, "📦 Есть:\n\n" + "\n".join(items))
+        send(chat_id, "📦 есть:\n\n" + "\n".join(items))
 
         return
     
@@ -1254,10 +1287,10 @@ def handle_message(update):
                 items.append(f"{emoji} {format_product_name(name)}")
 
         if not items:
-            send(chat_id, "Ща пока норм")
+            send(chat_id, "ща пока норм")
             return
 
-        send(chat_id, "⚠ Заканчивается:\n\n" + "\n".join(items))
+        send(chat_id, "⚠ заканчивается:\n\n" + "\n".join(items))
 
         return
     
@@ -1278,7 +1311,7 @@ def handle_message(update):
                 items.append(f"{emoji} {format_product_name(name)}")
 
         if not items:
-            send(chat_id, "Сиди дома, ничего покупать не нужно")
+            send(chat_id, "сиди дома, ничего покупать не нужно")
             return
 
         send(chat_id, "🛒 Закупка:\n\n" + "\n".join(items))
@@ -1299,7 +1332,7 @@ def handle_message(update):
 
             set_product(name, status="есть")
 
-            send(chat_id, f"Добавил {name}")
+            send(chat_id, f"добавил {name}")
 
         return
 
@@ -1316,7 +1349,7 @@ def handle_message(update):
 
             set_product(name, status="купить")
 
-            send(chat_id, f"Закончился {name}")
+            send(chat_id, f"закончился {name}")
 
         return
     
@@ -1330,7 +1363,7 @@ def handle_message(update):
 
     # ================= ПОИСК =================
 
-    results = search_products(text, data)
+    results = search_products(clean_text, data)
 
     if results:
 
@@ -1353,7 +1386,7 @@ def handle_message(update):
 
         buttons.append(["⬅ Меню"])
 
-        send(chat_id, "Вот что нашёл", reply=reply_keyboard(buttons))
+        send(chat_id, "во че нашёл", reply=reply_keyboard(buttons))
         return
 # ================= НЕИЗВЕСТНЫЙ ПРОДУКТ =================
 
@@ -1399,17 +1432,21 @@ def handle_message(update):
 
         for ing in ingredients:
 
-            if ing.isdigit():
-                continue
+            results = search_products(ing, data)
 
-            set_product(ing, status="есть")
+            if results:
+                name = results[0][5]
+            else:
+                name = ing
 
-            emoji = emoji_for_product(ing)
+            set_product(name, status="есть")
 
-            updated.append(f"{emoji} {ing}")
+            emoji = emoji_for_product(name)
+
+            updated.append(f"{emoji} {name}")
 
         if updated:
-            send(chat_id, "Добавил:\n\n" + "\n".join(updated))
+            send(chat_id, "добавил:\n\n" + "\n".join(updated))
 
         return
 # ==========================================
