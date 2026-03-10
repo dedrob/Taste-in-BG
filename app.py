@@ -559,9 +559,9 @@ def cook_assistant(chat_id):
 
     found = []
 
-    for ingredient in available:
+    for ingredient in available[:3]:
 
-        ingredient_en = ingredient
+        ingredient_en = format_product_name(ingredient)
         
         ingredient_en = format_product_name(ingredient)
 
@@ -1303,27 +1303,11 @@ def handle_message(update):
 
         return
     
-    # ================= NLP =================
+    # ================= ЧТО ПРИГОТОВИТЬ =================
 
-    ingredients = extract_ingredients(text)
+    if "что приготовить" in lower or "что можно приготовить" in lower:
 
-    if ingredients and len(ingredients) <= 5:
-
-        updated = []
-
-        for ing in ingredients:
-
-            if ing.isdigit():
-                continue
-
-            set_product(ing, status="есть")
-
-            emoji = emoji_for_product(ing)
-
-            updated.append(f"{emoji} {ing}")
-
-        if updated:
-            send(chat_id, "Добавил:\n\n" + "\n".join(updated))
+        cook_assistant(chat_id)
 
         return
 
@@ -1388,7 +1372,29 @@ def handle_message(update):
             ask_add_product(chat_id, text)
 
             return
-    
+    # ================= NLP =================
+
+    ingredients = extract_ingredients(text)
+
+    if ingredients and len(ingredients) <= 5:
+
+        updated = []
+
+        for ing in ingredients:
+
+            if ing.isdigit():
+                continue
+
+            set_product(ing, status="есть")
+
+            emoji = emoji_for_product(ing)
+
+            updated.append(f"{emoji} {ing}")
+
+        if updated:
+            send(chat_id, "Добавил:\n\n" + "\n".join(updated))
+
+        return
 # ==========================================
 # Главная точка входа Telegram webhook.
 # Принимает обновления от Telegram
