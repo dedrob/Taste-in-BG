@@ -415,7 +415,7 @@ def show_product(chat_id, row):
     name = row[5]
     taste = row[6]
 
-    emoji = emoji_for_product(name)
+    emoji = emoji_for_product(format_product_name(name))
     taste_emoji = extract_taste_emojis(taste)
 
     stock = get_product(name)
@@ -1020,6 +1020,38 @@ def handle_message(update):
             user_state[chat_id]["type"] = clean_text
             show_products(chat_id, data, category, clean_text)
             return
+
+# ================= ПАГИНАЦИЯ =================
+
+    if text in ["⬅", "➡"]:
+
+        if chat_id not in user_state:
+            return
+
+        if "category" not in user_state[chat_id]:
+            return
+
+        if "type" not in user_state[chat_id]:
+            return
+
+        category = user_state[chat_id]["category"]
+        type_name = user_state[chat_id]["type"]
+
+        page = user_state[chat_id].get("page", 0)
+
+        if text == "➡":
+            page += 1
+        else:
+            page -= 1
+
+        if page < 0:
+            page = 0
+
+        thinking(chat_id)
+
+        show_products(chat_id, data, category, type_name, page)
+
+        return
 
     # ================= ОТКРЫТИЕ ПРОДУКТА =================
 
