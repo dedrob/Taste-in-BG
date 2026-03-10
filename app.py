@@ -299,7 +299,7 @@ def show_categories(chat_id, data):
 
     buttons.append(["⬅ Меню"])
 
-    ui(chat_id, "Выбирай категорию 👇", reply_keyboard(buttons))
+    ui(chat_id, "Выбирай категорию 👇", keyboard=reply_keyboard(buttons))
 
 # ==========================================
 # Показывает подкатегории выбранной категории.
@@ -326,7 +326,7 @@ def show_types(chat_id, data, category):
 
     buttons.append(["⬅ Категории"])
 
-    ui(chat_id, category, reply_keyboard(buttons))
+    ui(chat_id, category, keyboard=reply_keyboard(buttons))
 
 # ==========================================
 # Показывает подкатегории выбранной категории.
@@ -379,7 +379,7 @@ def show_products(chat_id, data, category, type_name, page=0):
     user_state.setdefault(chat_id, {})
     user_state[chat_id]["page"] = page
 
-    ui(chat_id, phrase(FOUND), reply_keyboard(buttons))
+    ui(chat_id, phrase(FOUND), keyboard=reply_keyboard(buttons))
 
 # ==========================================
 # Показывает карточку продукта.
@@ -948,7 +948,9 @@ def handle_message(update):
 
             name = r[5]
 
-            if name.lower() == text.lower():
+            clean = text.split(" ", 1)[-1].lower()
+
+            if name.lower() == clean:
 
                 thinking(chat_id)
                 show_product(chat_id, r)
@@ -960,7 +962,10 @@ def handle_message(update):
 
         items = text.split(" ", 1)[1]
 
-        items = items.replace(",", " ").split()
+        items = [
+            x for x in items.replace(",", " ").split()
+            if x.lower() not in ["и","and"]
+        ]
 
         added = []
 
@@ -970,7 +975,18 @@ def handle_message(update):
 
             if results:
 
-                name = results[0][5]
+                name = None
+
+                for r in results:
+
+                    candidate = r[5].lower()
+
+                    if candidate == item.lower():
+                        name = r[5]
+                        break
+
+                if not name:
+                    name = results[0][5]
 
                 set_product(name, status="есть")
 
@@ -996,7 +1012,10 @@ def handle_message(update):
 
         items = text.split(" ", 1)[1]
 
-        items = items.replace(",", " ").split()
+        items = [
+            x for x in items.replace(",", " ").split()
+            if x.lower() not in ["и","and"]
+        ]
 
         updated = []
 
@@ -1006,7 +1025,18 @@ def handle_message(update):
 
             if results:
 
-                name = results[0][5]
+                name = None
+
+                for r in results:
+
+                    candidate = r[5].lower()
+
+                    if candidate == item.lower():
+                        name = r[5]
+                        break
+
+                if not name:
+                    name = results[0][5]
 
                 set_product(name, status="есть")
 
@@ -1027,7 +1057,10 @@ def handle_message(update):
 
         items = text.split(" ", 1)[1]
 
-        items = items.replace(",", " ").split()
+        items = [
+            x for x in items.replace(",", " ").split()
+            if x.lower() not in ["и","and"]
+        ]
 
         updated = []
 
@@ -1037,7 +1070,18 @@ def handle_message(update):
 
             if results:
 
-                name = results[0][5]
+                name = None
+
+                for r in results:
+
+                    candidate = r[5].lower()
+
+                    if candidate == item.lower():
+                        name = r[5]
+                        break
+
+                if not name:
+                    name = results[0][5]
 
                 set_product(name, status="купить")
 
