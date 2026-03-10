@@ -806,34 +806,39 @@ def handle_callback(update):
 def handle_message(update):
 
     message = update["message"]
-    
     chat_id = message["chat"]["id"]
 
     text = message.get("text", "").strip()
+
+    lower = text.lower()
+
+    clean = text
+    if " " in text:
+        clean = text.split(" ", 1)[1].strip()
     
-    user_msg_id = message["message_id"]
-    
-    # память последних сообщений
+    # ================= ПАМЯТЬ СООБЩЕНИЙ =================
+
     memory = chat_memory.setdefault(chat_id, [])
 
-    memory.append(text.lower())
+    memory.append(lower)
 
     if len(memory) > 5:
         memory.pop(0)
-    
-# записываем сообщение в лог
+        
+    # ================= ЛОГ =================
+
     log_event({
         "type": "message",
         "chat_id": chat_id,
         "text": text
     })
+    
+    # ================= ЗАГРУЗКА КАТАЛОГА =================
 
-# загружаем таблицу продуктов
     data = load_data_cached()
 
+    # ================= ПАГИНАЦИЯ =================
 
-# ================= ПАГИНАЦИЯ =================
-    # пользователь нажал кнопку перехода страницы
     if text in ["⬅", "➡"]:
 
         state = user_state.get(chat_id)
@@ -864,31 +869,34 @@ def handle_message(update):
 
         return
 
+    # ================= СТАРТ =================
 
-# ================= СТАРТ =====================
     if text == "/start":
 
         show_menu(chat_id)
+
         return
-    
-    
-# ================= КАТАЛОГ ===================  
+
+    # ================= ГЛАВНОЕ МЕНЮ =================
+
     if text == "📂 Каталог":
 
         thinking(chat_id)
 
         show_categories(chat_id, data)
+
         return
 
 
-# ================= ЧТО ПРИГОТОВИТЬ =================
     if text == "🍳 Что приготовить":
 
         thinking(chat_id)
+
         cook_assistant(chat_id)
+
         return
 
-# ================= МОЯ КУХНЯ =================
+
     if text == "📦 Моя кухня":
 
         thinking(chat_id)
@@ -897,84 +905,79 @@ def handle_message(update):
 
         return
 
- # ================= НАЗАД =================
+
+    # ================= НАЗАД =================
+
     if text == "⬅ Меню":
+
         show_menu(chat_id)
+
         user_state.pop(chat_id, None)
+
         return
 
+
     if text == "⬅ Категории":
+
         show_categories(chat_id, data)
+
         user_state.pop(chat_id, None)
+
         return
+
 
     if text == "⬅ Типы":
 
         if chat_id in user_state and "category" in user_state[chat_id]:
 
             show_types(chat_id, data, user_state[chat_id]["category"])
+
             user_state[chat_id].pop("type", None)
 
         return
+    
+    
+    # ================= УДАЛЕНИЕ =================
 
-# удалить продукт / очистить кухню
-    if text.startswith("удали"):
+    if lower.startswith("удали"):
 
-        arg = text.replace("удали", "").strip().lower()
+        arg = lower.replace("удали", "").strip()
 
         stock = get_all()
 
         # удалить всю кухню
         if arg in ["всё", "все", "кухню"]:
 
-            if not stock:
-                send(chat_id, "Кухня уже пустая.")
-                return
+            save_stock({})
 
-            import json
-
-            with open("stock.json", "w", encoding="utf-8") as f:
-                json.dump({}, f, ensure_ascii=False, indent=2)
-
-            send(chat_id, "Кухня очищена.")
+            send(chat_id, "Кухня очищена")
 
             return
 
-        # ищем продукт прямо в кухне
-        found = None
+        # удалить конкретный продукт
+        results = search_products(arg, data)
 
-        for name in stock.keys():
-
-            if arg in name.lower():
-                found = name
-                break
-
-
-        if not found:
-
-            ui(chat_id, "Этого продукта нет в кухне")
-
+        if not results:
+            send(chat_id, "Не нашла такой продукт")
             return
 
+        name = results[0][5]
 
-        del stock[found]
+        if name in stock:
 
-        import json
+            del stock[name]
 
-        with open("stock.json", "w", encoding="utf-8") as f:
-            json.dump(stock, f, ensure_ascii=False, indent=2)
+            save_stock(stock)
 
+            send(chat_id, f"Удалили из кухни: {name}")
 
-        ui(chat_id, f"Удалили из кухни: {found}")
+        else:
+            send(chat_id, "Этого продукта нет в кухне")
 
         return
 
-# ================= ОПРЕДЕЛЯЕМ КАТЕГОРИЮ =================
-    clean = text
+    # ================= КАТЕГОРИИ =================
 
-    if " " in text:
-        clean = text.split(" ", 1)[1]
-    
     categories = get_categories(data)
 
     if clean in categories:
@@ -984,8 +987,393 @@ def handle_message(update):
         user_state[chat_id] = {"category": clean}
 
         show_types(chat_id, data, clean)
+
         return
 
+    # ================= ТИПЫ =================
+
+    if chat_id in user_state and "category" in user_state[chat_id]:
+
+        category = user_state[chat_id]["category"]
+
+        types = get_types(data, category)
+
+        if clean in types:
+
+            thinking(chat_id)
+
+            user_state[chat_id]["type"] = clean
+
+            show_products(chat_id, data, category, clean)
+
+            return
+        
+     # ================= ОТКРЫТИЕ ПРОДУКТА =================
+
+    if chat_id in user_state and "type" in user_state[chat_id]:
+
+        category = user_state[chat_id]["category"]
+        type_name = user_state[chat_id]["type"]
+
+        products = get_products(data, category, type_name)
+
+        for r in products:
+
+            if len(r) < 6:
+                continue
+
+            name = r[5]
+
+            if name.lower() == clean.lower():
+
+                thinking(chat_id)
+
+                show_product(chat_id, r)
+
+                return
+
+    # ================= КОМАНДЫ КУХНИ =================
+
+    if lower.startswith("добавь "):
+
+        add_products_to_kitchen(chat_id, text)
+
+        return
+
+    if lower.startswith("купила ") or lower.startswith("купил "):
+
+        add_products_to_kitchen(chat_id, text)
+
+        return
+
+    if "закончил" in lower:
+
+        mark_product_missing(chat_id, text)
+
+        return
+
+    # ================= ИНФО КУХНИ =================
+
+    def show_inventory(chat_id):
+
+        stock = get_all()
+
+        if not stock:
+            send(chat_id, "кухня пустая")
+            return
+
+        text = ""
+
+        for name, data in stock.items():
+
+            emoji = emoji_for_product(name)
+            status = data.get("status")
+
+            text += f"{emoji} {name} — {status}\n"
+
+        send(chat_id, text)
+
+# ================= СТатУС ПРОДУКТА =================
+    if text.endswith("!"):
+
+        change_product_status(chat_id, text)
+
+        return
+# ================= ПЕРЕВОД ПРОДУКТА =================
+    # Если пользователь нажал кнопку "🇧🇬 Перевести",
+    # бот ожидает ввод перевода.
+    # Здесь мы сохраняем перевод продукта.  
+    if chat_id in user_state and "translate_product" in user_state[chat_id]:
+
+        product = user_state[chat_id]["translate_product"]
+
+        add_translation(product, text)
+
+        send(chat_id, f"Сохранил перевод:\n{product} / {text}")
+
+        user_state.pop(chat_id)
+
+        return 
+    
+# ================= ДОБАВЛЕНИЕ НОВОГО ПРОДУКТА =================
+    if chat_id in user_state and "new_product_name" in user_state[chat_id]:
+
+        save_new_product_name(chat_id, text)
+
+        return
+
+
+    if chat_id in user_state and "new_product_taste" in user_state[chat_id]:
+
+        save_new_product_taste(chat_id, text)
+
+        return
+    
+# ================= ДОБАВЛЕНИЕ ЧЕРЕЗ КНОПКУ =================   
+    if text == "➕ Добавить продукт":
+
+        start_add_product(chat_id)
+
+        return
+
+# ================= КАТЕГОРИИ =================
+    categories = get_categories(data)
+
+    if clean in categories:
+
+        thinking(chat_id)
+
+        user_state[chat_id] = {"category": clean}
+
+        show_types(chat_id, data, clean)
+
+        return
+    
+# ================= ТИПЫ =================
+    if chat_id in user_state and "category" in user_state[chat_id]:
+
+        category = user_state[chat_id]["category"]
+
+        types = get_types(data, category)
+
+        if clean in types:
+
+            thinking(chat_id)
+
+            user_state[chat_id]["type"] = clean
+
+            show_products(chat_id, data, category, clean)
+
+            return
+
+
+# ================= ОТКРЫТИЕ ПРОДУКТА =================
+    if chat_id in user_state and "type" in user_state[chat_id]:
+
+        category = user_state[chat_id]["category"]
+        type_name = user_state[chat_id]["type"]
+
+        products = get_products(data, category, type_name)
+
+        for r in products:
+
+            if len(r) < 6:
+                continue
+
+            name = r[5]
+
+            if name.lower() == clean.lower():
+
+                thinking(chat_id)
+
+                show_product(chat_id, r)
+
+                return
+
+# Добавление нескольких продуктов через "добавь"   
+    lower = text.lower()
+
+    if lower.startswith("добавь ") or lower.startswith("добавить "):
+
+        items = text.split(" ", 1)[1]
+
+        items = items.replace(",", " ").split()
+
+        added = []
+
+        for item in items:
+
+            results = search_products(item, data)
+
+            if results:
+
+                name = results[0][5]
+
+                set_product(name, status="есть")
+
+                emoji = emoji_for_product(name)
+
+                added.append(f"{emoji} {name}")
+
+                add_history(f"Добавил: {name}")
+
+            else:
+
+                ask_add_product(chat_id, item)
+                return
+
+        send(chat_id, "Добавил.\n\n" + "\n".join(added))
+        
+        
+        return
+    
+    # Быстрое изменение статуса "купила"
+    if lower.startswith("купила ") or lower.startswith("купил "):
+
+        items = text.split(" ", 1)[1]
+
+        items = items.replace(",", " ").split()
+
+        updated = []
+
+        for item in items:
+
+            results = search_products(item, data)
+
+            if results:
+
+                name = results[0][5]
+
+                set_product(name, status="есть")
+
+                emoji = emoji_for_product(name)
+
+                updated.append(f"{emoji} {name}")
+
+                add_history(f"Купила: {name}")
+
+        if updated:
+            send(chat_id, "Отметила.\n\n" + "\n".join(updated))
+
+        return
+    
+    #Команда "закончилось"
+    if "закончил" in lower:
+
+        items = text.split(" ", 1)[1]
+
+        items = items.replace(",", " ").split()
+
+        updated = []
+
+        for item in items:
+
+            results = search_products(item, data)
+
+            if results:
+
+                name = results[0][5]
+
+                set_product(name, status="купить")
+
+                emoji = emoji_for_product(name)
+
+                updated.append(f"{emoji} {name}")
+
+                add_history(f"Закончился: {name}")
+
+        if updated:
+            send(chat_id, "Записала.\n\n" + "\n".join(updated))
+
+        return
+    
+    # продолжение списка продуктов
+    if text.lower().startswith("и "):
+
+        items = extract_ingredients(text)
+
+        if items:
+
+            updated = []
+
+            for ing in items:
+
+                set_product(ing, status="есть")
+
+                emoji = emoji_for_product(ing)
+
+                updated.append(f"{emoji} {ing}")
+
+            send(chat_id, "добавил\n\n" + "\n".join(updated))
+
+            return
+        
+# ================= ДОБАВЛЕНИЕ ПРОДУКТОВ В КУХНЮ =================
+
+    text = text.replace(",", " ")
+
+    ingredients = extract_ingredients(text)
+
+    if ingredients:
+
+        # определяем статус продукта
+        status = None
+
+        if any(w in lower for w in ["купил", "купила", "взял", "взяла", "добавь", "добавила"]):
+            status = "есть"
+
+        elif any(w in lower for w in ["закончил", "кончился", "нет", "закончились"]):
+            status = "купить"
+
+        elif "есть" in lower:
+            status = "есть"
+
+        if status:
+
+            updated = []
+
+            for ing in ingredients:
+
+                ing = ing.strip().lower()
+
+                # фильтр мусора
+                if len(ing) < 3:
+                    continue
+
+                set_product(ing, status=status)
+
+                emoji = emoji_for_product(ing)
+
+                updated.append(f"{emoji} {ing}")
+
+                if status == "есть":
+                    add_history(f"Добавил: {ing}")
+                else:
+                    add_history(f"Закончился: {ing}")
+
+            if not updated:
+                return
+
+            replies_add = [
+                "добавила",
+                "ок",
+                "записала",
+            ]
+
+            replies_out = [
+                "отметила",
+                "поняла",
+                "ок",
+            ]
+
+            import random
+
+            if status == "есть":
+                send(chat_id, random.choice(replies_add) + "\n\n" + "\n".join(updated))
+            else:
+                send(chat_id, random.choice(replies_out) + "\n\n" + "\n".join(updated))
+
+            return
+
+# ================= NLP =================
+
+    ingredients = extract_ingredients(text)
+
+    if ingredients:
+
+        handle_nlp(chat_id, text, ingredients)
+
+        return
+
+    # ================= ПОИСК =================
+
+    results = search_products(text, data)
+
+    if results:
+
+        show_search_results(chat_id, results)
+
+        return
 
 # ================= ОПРЕДЕЛЯЕМ ТИП =================
     if chat_id in user_state and "category" in user_state[chat_id]:
@@ -1022,20 +1410,16 @@ def handle_message(update):
 
         products = get_products(data, category, type_name)
 
-# защита если список пуст
         if not products:
-            send(chat_id, "Не нашлось")
             return
 
-# убираем эмодзи и перевод из текста кнопки
-    clean_text = text
+        clean_text = text
 
-    if " " in text:
-        clean_text = text.split(" ", 1)[1].strip()
+        if " " in text:
+            clean_text = text.split(" ", 1)[1].strip()
 
         for r in products:
 
-# защита от кривых строк
             if len(r) < 6:
                 continue
 
@@ -1336,7 +1720,7 @@ def handle_message(update):
             user_state.pop(chat_id)
 
             return
-    # История покупок    
+# История покупок    
     if text == "история":
 
         if not kitchen_history:
@@ -1489,7 +1873,7 @@ def handle_message(update):
 
         stock = get_all()
 
-        # ищем продукт в кухне
+# ищем продукт в кухне
         found = None
 
         for name in stock.keys():
