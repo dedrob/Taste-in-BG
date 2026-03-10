@@ -326,6 +326,10 @@ def show_types(chat_id, data, category):
 
     types = get_types(data, category)
 
+    if not types:
+        send(chat_id, "ниче не нашел")
+        return
+
     buttons = []
     row = []
 
@@ -383,7 +387,7 @@ def show_products(chat_id, data, category, type_name, page=0):
     if page > 0:
         nav.append("⬅")
 
-    nav.append(f"{page+1}/{pages}")
+    nav.append("•")
 
     if page < pages - 1:
         nav.append("➡")
