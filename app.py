@@ -561,6 +561,8 @@ def cook_assistant(chat_id):
 
     for ingredient in available:
 
+        ingredient_en = ingredient
+        
         ingredient_en = format_product_name(ingredient)
 
         if "/" in ingredient_en:
@@ -717,37 +719,50 @@ def handle_callback(update):
             return
 
         title = translate_to_ru(recipe["strMeal"])
-
         instructions = translate_to_ru(recipe["strInstructions"])
-
         photo = recipe["strMealThumb"]
 
-        text = f"""
-    🍳 {title}
+        # проверяем ингредиенты
+        have, missing = analyze_recipe_ingredients(recipe)
 
-    📋 Инструкция:
+        text = f"🍳 {title}\n\n"
 
-    {instructions[:1000]}
-    """
+        if have:
+            text += "есть:\n"
+            text += "\n".join([f"{emoji_for_product(x)} {x}" for x in have])
+            text += "\n\n"
+
+        if missing:
+            text += "не хватает:\n"
+            text += "\n".join([f"• {x}" for x in missing])
+            text += "\n\n"
+
+        text += "📋 Инструкция:\n\n"
+        text += instructions[:900]
+
         buttons = [
-        [
-            {
-            "text": "🛒 Добавить missing в покупки",
-            "callback_data": f"ADD_RECIPE:{recipe_id}"
-            }
+            [
+                {
+                    "text": "🛒 Добавить missing в покупки",
+                    "callback_data": f"ADD_RECIPE:{recipe_id}"
+                }
+            ]
         ]
-    ]
 
-        send(
-            chat_id,
-            text,
-            inline=inline_keyboard(buttons)
-    )
+        payload = {
+            "chat_id": chat_id,
+            "photo": photo,
+            "caption": text,
+            "reply_markup": inline_keyboard(buttons)
+        }
 
-        send_photo(chat_id, photo)
+        requests.post(
+            f"{TELEGRAM_URL}/sendPhoto",
+            json=payload
+        )
 
         return
-
+    
 # добавить ингредиенты рецепта в кухню
     if data_cb.startswith("ADD_RECIPE:"):
 
@@ -1019,8 +1034,18 @@ def handle_message(update):
                         break
 
                 if not name:
-                    name = results[0][5]
 
+                    for r in results:
+
+                        candidate = r[5].lower()
+
+                        if candidate.startswith(item.lower()):
+                            name = r[5]
+                            break
+
+                if not name:
+                    name = results[0][5]
+                    
                 set_product(name, status="есть")
 
                 emoji = emoji_for_product(name)
@@ -1342,6 +1367,7 @@ def handle_message(update):
         # фильтр команд
         blacklist = [
             "что",
+            "что приготовить",
             "как",
             "где",
             "почему",
