@@ -4,7 +4,7 @@ TOKEN = os.environ.get("TOKEN")
 if not TOKEN:
     print("WARNING: TOKEN not set")
             
-GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1tI2pldLjYhwADYzrXF5pABD8fOGYIhVtj8Y3KEAW_2U/export?format=csv" + "&gid=1945827954"
+GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1tI2pldLjYhwADYzrXF5pABD8fOGYIhVtj8Y3KEAW_2U/export?format=csv"
 
 UPDATE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwdMs7XT01UL65xnpXhn2DIkvOtlZvt1mAk0xj8RkvDrGxiWMfL3wZi6f3bgUUse4a3/exec"
 
