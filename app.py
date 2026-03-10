@@ -253,7 +253,7 @@ def show_menu(chat_id):
     buttons = [
         ["📂 Каталог"], 
         ["🍳 Что приготовить"],
-        ["➕ Добавить продукт"],
+        ["➕ Добавить продукты"],
         ["📦 Моя кухня"]
     ]
 
@@ -552,7 +552,7 @@ def cook_assistant(chat_id):
 
     if not available:
 
-        send(chat_id, "На кухне пусто 😅")
+        send(chat_id, "Дома пусто")
         return
 
     send(chat_id, "Смотрю что можно приготовить...")
@@ -575,7 +575,7 @@ def cook_assistant(chat_id):
 
     if not found:
 
-        send(chat_id, "Не нашла рецептов из этих продуктов")
+        send(chat_id, "Ну хер его что из этого можно сделать")
         return
 
     send(chat_id, phrase(COOK))
@@ -596,7 +596,13 @@ def cook_assistant(chat_id):
         recipes_scored.append((len(missing), r, recipe))
 
     recipes_scored.sort(key=lambda x: x[0])
-
+    
+    send(chat_id, random.choice([
+        "Нашел рецепты 👇",
+        "Вот что можно приготовить 👇",
+        "Самые простые рецепты 👇"
+    ]))
+    
     for _, r, recipe in recipes_scored:
 
         if r["idMeal"] in shown:
@@ -726,7 +732,7 @@ def handle_callback(update):
         buttons = [
         [
             {
-            "text": "➕ Добавить ингредиенты в кухню",
+            "text": "🛒 Добавить missing в покупки",
             "callback_data": f"ADD_RECIPE:{recipe_id}"
             }
         ]
@@ -750,7 +756,7 @@ def handle_callback(update):
         recipe = get_recipe(recipe_id)
 
         if not recipe:
-            send(chat_id, "Не получилось открыть рецепт")
+            send(chat_id, "Не открывается")
             return
 
         added = []
@@ -828,9 +834,7 @@ def handle_message(update):
     })
 
     # ================= ЗАГРУЗКА ДАННЫХ =================
-
     data = load_data_cached()
-
 
     # ================= ПЕРЕВОД ПРОДУКТА =================
 
@@ -855,42 +859,70 @@ def handle_message(update):
 
     # ================= МЕНЮ =================
 
+    # Меню, категории, типы, продукты — это основная навигация по каталогу.
     if text == "📂 Каталог":
 
         thinking(chat_id)
         show_categories(chat_id, data)
         return
-
-
+    # ================= ЧТО ПРИГОТОВИТЬ =================
     if text == "🍳 Что приготовить":
 
         thinking(chat_id)
         cook_assistant(chat_id)
         return
 
-
+    # ================= МОЯ КУХНЯ =================
     if text == "📦 Моя кухня":
 
         thinking(chat_id)
         show_kitchen(chat_id)
         return
 
-    # ================= НАЗАД =================
+    # ================= МАССОВОЕ ДОБАВЛЕНИЕ =================
 
+    if text == "➕ Добавить продукты":
+
+        user_state[chat_id] = {"bulk_add": True}
+
+        send(chat_id, "Пиши продукты по одному.\n\nНапиши 'стоп' чтобы закончить.")
+
+        return
+
+    # ================= РЕЖИМ МАССОВОГО ДОБАВЛЕНИЯ =================
+
+    if chat_id in user_state and user_state[chat_id].get("bulk_add"):
+
+        if lower in ["стоп", "хватит", "готово"]:
+
+            user_state.pop(chat_id)
+
+            send(chat_id, "Ок, закончили.")
+            return
+
+        name = text.strip()
+
+        ask_add_product(chat_id, name)
+
+        return
+
+    # ================= НАЗАД =================
+    
+    # кнопки "назад" для удобной навигации по меню.
     if text == "⬅ Меню":
 
         show_menu(chat_id)
         user_state.pop(chat_id, None)
         return
 
-
+    # кнопки "назад" для удобной навигации по меню.
     if text == "⬅ Категории":
 
         show_categories(chat_id, data)
         user_state.pop(chat_id, None)
         return
 
-
+    # кнопки "назад" для удобной навигации по меню.
     if text == "⬅ Типы":
 
         if chat_id in user_state and "category" in user_state[chat_id]:
@@ -900,6 +932,7 @@ def handle_message(update):
 
         return
 
+   
     # ================= КАТЕГОРИИ =================
 
     categories = get_categories(data)
@@ -1006,6 +1039,48 @@ def handle_message(update):
 
         return
 
+    
+    # ================= УДАЛИТЬ ПРОДУКТ =================
+
+    if lower.startswith("удали"):
+
+        item = text.replace("удали", "").strip()
+
+        if not item:
+            send(chat_id, "Что удалить?")
+            return
+
+        results = search_products(item, data)
+
+        if not results:
+
+            send(chat_id, "Не нашла такой продукт.")
+            return
+
+        name = results[0][5]
+
+        stock = get_all()
+
+        if name not in stock:
+
+            send(chat_id, "Этого продукта нет на кухне.")
+            return
+
+        stock.pop(name)
+
+        import json
+
+        with open("stock.json", "w", encoding="utf-8") as f:
+            json.dump(stock, f, ensure_ascii=False, indent=2)
+
+        emoji = emoji_for_product(name)
+
+        send(chat_id, f"Убрала:\n\n{emoji} {name}")
+
+        add_history(f"Удалил: {name}")
+
+        return
+    
     # ================= КУПИЛ =================
 
     if lower.startswith("купил ") or lower.startswith("купила "):
@@ -1096,15 +1171,125 @@ def handle_message(update):
 
         return
 
+    # ================= ЧТО ЕСТЬ =================
+
+    if lower in ["что есть", "холодильник", "что дома"]:
+
+        stock = get_all()
+
+        items = []
+
+        for name, data in stock.items():
+
+            if data.get("status") == "есть":
+
+                emoji = emoji_for_product(name)
+
+                items.append(f"{emoji} {format_product_name(name)}")
+
+        if not items:
+            send(chat_id, "На кухне пусто.")
+            return
+
+        send(chat_id, "📦 Есть:\n\n" + "\n".join(items))
+
+        return
+    
+    # ================= ЧТО ЗАКАНЧИВАЕТСЯ =================
+
+    if lower in ["что заканчивается", "что скоро закончится"]:
+
+        stock = get_all()
+
+        items = []
+
+        for name, data in stock.items():
+
+            if data.get("status") == "мало":
+
+                emoji = emoji_for_product(name)
+
+                items.append(f"{emoji} {format_product_name(name)}")
+
+        if not items:
+            send(chat_id, "Ща пока норм")
+            return
+
+        send(chat_id, "⚠ Заканчивается:\n\n" + "\n".join(items))
+
+        return
+    
+    # ================= ЗАКУПКА =================
+
+    if lower in ["закупка", "магазин"]:
+
+        stock = get_all()
+
+        items = []
+
+        for name, data in stock.items():
+
+            if data.get("status") in ["мало", "купить"]:
+
+                emoji = emoji_for_product(name)
+
+                items.append(f"{emoji} {format_product_name(name)}")
+
+        if not items:
+            send(chat_id, "Сиди дома, ничего покупать не нужно")
+            return
+
+        send(chat_id, "🛒 Закупка:\n\n" + "\n".join(items))
+
+        return
+    
+    # ================= БЫСТРЫЕ КОМАНДЫ =================
+
+    if text.startswith("+"):
+
+        name = text[1:].strip()
+
+        results = search_products(name, data)
+
+        if results:
+
+            name = results[0][5]
+
+            set_product(name, status="есть")
+
+            send(chat_id, f"Добавил {name}")
+
+        return
+
+
+    if text.startswith("-"):
+
+        name = text[1:].strip()
+
+        results = search_products(name, data)
+
+        if results:
+
+            name = results[0][5]
+
+            set_product(name, status="купить")
+
+            send(chat_id, f"Закончился {name}")
+
+        return
+    
     # ================= NLP =================
 
     ingredients = extract_ingredients(text)
 
-    if ingredients:
+    if ingredients and len(ingredients) <= 5:
 
         updated = []
 
         for ing in ingredients:
+
+            if ing.isdigit():
+                continue
 
             set_product(ing, status="есть")
 
@@ -1112,7 +1297,9 @@ def handle_message(update):
 
             updated.append(f"{emoji} {ing}")
 
-        send(chat_id, "Добавила:\n\n" + "\n".join(updated))
+        if updated:
+            send(chat_id, "Добавил:\n\n" + "\n".join(updated))
+
         return
 
     # ================= ПОИСК =================
@@ -1142,7 +1329,40 @@ def handle_message(update):
 
         send(chat_id, "Вот что нашёл", reply=reply_keyboard(buttons))
         return
+# ================= НЕИЗВЕСТНЫЙ ПРОДУКТ =================
 
+# если текст похож на название продукта
+    words = text.replace(",", " ").split()
+
+    # фильтр коротких сообщений
+    if 1 <= len(words) <= 3:
+
+        candidate = text.lower()
+
+        # фильтр команд
+        blacklist = [
+            "что",
+            "как",
+            "где",
+            "почему",
+            "когда",
+            "меню",
+            "каталог",
+            "кухня",
+            "рецепт",
+            "добавь",
+            "купил",
+            "купила",
+            "закончился",
+            "закончились"
+        ]
+
+        if candidate not in blacklist:
+
+            ask_add_product(chat_id, text)
+
+            return
+    
 # ==========================================
 # Главная точка входа Telegram webhook.
 # Принимает обновления от Telegram
