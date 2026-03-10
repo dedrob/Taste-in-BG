@@ -10,6 +10,7 @@ from data import load_data
 data_cache = None
 data_cache_time = 0
 from catalog import get_categories, get_types, get_products
+from deep_translator import GoogleTranslator
 from recipes import recipes_by_ingredient, get_recipe
 from stock import get_product, set_product, get_all
 from translations import format_product_name, add_translation
@@ -559,15 +560,15 @@ def cook_assistant(chat_id):
 
     found = []
 
-    for ingredient in available[:3]:
+    for ingredient in random.sample(available, min(3, len(available))):
 
-        ingredient_en = format_product_name(ingredient)
-        
         ingredient_en = format_product_name(ingredient)
 
         if "/" in ingredient_en:
             ingredient_en = ingredient_en.split("/")[-1].strip()
 
+        ingredient_en = ingredient_en.split()[0].lower()
+         
         recipes = recipes_by_ingredient(ingredient_en)
 
         if recipes:
@@ -676,12 +677,14 @@ def handle_callback(update):
 
         thinking(chat_id)
 
-        ingredient_en = format_product_name(ingredient)
+        try:
+            ingredient_en = GoogleTranslator(source="auto", target="en").translate(ingredient)
+        except:
+            ingredient_en = ingredient
 
-        if "/" in ingredient_en:
-            ingredient_en = ingredient_en.split("/")[-1].strip()
+            ingredient_en = ingredient_en.lower()
 
-        recipes = recipes_by_ingredient(ingredient_en)
+            recipes = recipes_by_ingredient(ingredient_en)
 
         if not recipes:
 
