@@ -6,11 +6,11 @@ import random
 from flask import Flask, request
 
 from config import TOKEN, APPS_SCRIPT_URL
-from data import load_data, load_ingredient_map
+from data import load_data, recipes_by_ingredients
 data_cache = None
 data_cache_time = 0
 from catalog import get_categories, get_types, get_products
-from recipes import recipes_by_ingredient, get_recipe
+from recipes import get_recipe, recipes_by_ingredients
 from stock import get_product, set_product, get_all
 from translations import format_product_name, add_translation
 from utils import emoji_for_product, extract_taste_emojis
@@ -27,7 +27,7 @@ TELEGRAM_URL = f"https://api.telegram.org/bot{TOKEN}"
 ingredient_map = {}
 
 try:
-    ingredient_map = load_ingredient_map()
+    ingredient_map = recipes_by_ingredients()
 except Exception as e:
     print("ingredient map load error:", e)
 
