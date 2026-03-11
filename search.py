@@ -1,5 +1,7 @@
 from config import SEARCH_LIMIT
 
+from data import load_data, normalize_ingredient
+
 
 # ================= LEVENSHTEIN =================
 
@@ -42,9 +44,13 @@ def similar_prefix(a, b):
 
 # ================= SEARCH =================
 
-def search_products(query, data):
+def search_products(query):
+
+    data = load_data()
 
     query = query.lower().strip()
+
+    query = normalize_ingredient(query)
 
     results = []
 

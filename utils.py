@@ -226,3 +226,14 @@ def extract_taste_emojis(description):
             found.append(emoji)
 
     return " ".join(found[:3])
+
+def main_keyboard():
+
+    return {
+        "keyboard": [
+            ["🍳 Что приготовить"],
+            ["📦 Каталог"],
+            ["🥚 Моя кухня"]
+        ],
+        "resize_keyboard": True
+    }

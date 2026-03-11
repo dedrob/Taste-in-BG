@@ -1,9 +1,12 @@
 from config import PAGE_SIZE
+from data import load_data
 
 
 # ================= CATEGORIES =================
 
-def get_categories(data):
+def get_categories():
+
+    data = load_data()
 
     categories = {}
 
@@ -19,7 +22,9 @@ def get_categories(data):
 
 # ================= TYPES =================
 
-def get_types(data, category):
+def get_types(category):
+
+    data = load_data()
 
     types = {}
 
@@ -38,7 +43,9 @@ def get_types(data, category):
 
 # ================= PRODUCTS =================
 
-def get_products(data, category, type_name):
+def get_products(category, type_name):
+
+    data = load_data()
 
     products = []
 

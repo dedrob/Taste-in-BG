@@ -39,13 +39,10 @@ last_bot_message = {}
 
 ui_message = {}
 
-
-# ================= Логи =================
-
-logs = []
-
 kitchen_history = []
 
+# ================= Логи =================
+logs = []
 
 # ==========================================
 # Добавляет событие в список логов.
@@ -473,37 +470,41 @@ def show_product(chat_id, row):
 # Показывает все продукты которые есть дома
 # ==========================================
 def show_kitchen(chat_id):
+    try:
+        stock = get_all()
 
-    stock = get_all()
+        if not stock:
+            send(chat_id, "На кухне пусто.")
+            return
 
-    if not stock:
-        send(chat_id, "На кухне пусто.")
-        return
+        have = []
+        buy = []
 
-    have = []
-    buy = []
+        for name, data in stock.items():
 
-    for name, data in stock.items():
+            emoji = emoji_for_product(name)
 
-        emoji = emoji_for_product(name)
+            status = data.get("status")
 
-        status = data.get("status")
+            if status == "есть":
+                have.append(f"{emoji} {format_product_name(name)}")
 
-        if status == "есть":
-            have.append(f"{emoji} {format_product_name(name)}")
+            elif status in ["мало", "купить"]:
+                buy.append(f"{emoji} {format_product_name(name)}")
 
-        elif status in ["мало", "купить"]:
-            buy.append(f"{emoji} {format_product_name(name)}")
+        text = ""
 
-    text = ""
+        if have:
+            text += "📦 Есть:\n\n" + "\n".join(have)
 
-    if have:
-        text += "📦 Есть:\n\n" + "\n".join(have)
+        if buy:
+            text += "\n\n🛒 Купить:\n\n" + "\n".join(buy)
 
-    if buy:
-        text += "\n\n🛒 Купить:\n\n" + "\n".join(buy)
-
-    send(chat_id, text)
+        send(chat_id, text)
+        
+    except Exception as e:
+        print("show_kitchen error:", e)
+        send(chat_id, "ошибка при загрузке кухни.")
 
 # Добавить функцию проверки ингредиентов
 def analyze_recipe_ingredients(recipe):
